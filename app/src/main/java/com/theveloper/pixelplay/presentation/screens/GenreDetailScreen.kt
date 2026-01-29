@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.util.UnstableApi
@@ -131,6 +132,29 @@ fun GenreDetailScreen(
                 val canConsumeScroll = !(isScrollingDown && newHeight == minTopBarHeightPx)
                 return if (canConsumeScroll) Offset(0f, consumed) else Offset.Zero
             }
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                val currentHeight = topBarHeight.value
+                if (currentHeight > minTopBarHeightPx && currentHeight < maxTopBarHeightPx) {
+                    // Decide target based on proximity and velocity
+                    val targetHeight = if (available.y > 500f) {
+                        maxTopBarHeightPx // Flinging down -> Expand
+                    } else if (available.y < -500f) {
+                        minTopBarHeightPx // Flinging up -> Collapse
+                    } else {
+                        // Snap to nearest
+                        if (currentHeight > (minTopBarHeightPx + maxTopBarHeightPx) / 2) maxTopBarHeightPx else minTopBarHeightPx
+                    }
+                    
+                    coroutineScope.launch {
+                        topBarHeight.animateTo(
+                            targetValue = targetHeight,
+                            animationSpec = spring(stiffness = Spring.StiffnessMediumLow) 
+                        )
+                    }
+                }
+                return super.onPostFling(consumed, available)
+            }
         }
     }
 
@@ -209,8 +233,8 @@ fun GenreDetailScreen(
                     state = lazyListState,
                     contentPadding = PaddingValues(
                         top = currentTopBarHeightDp + 8.dp, // Push content down initially
-                        start = 16.dp,
-                        end = 16.dp,
+                        start = 8.dp,
+                        end = 8.dp,
                         bottom = fabBottomPadding + 148.dp
                     ),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -283,14 +307,14 @@ fun GenreDetailScreen(
                     .padding(bottom = fabBottomPadding + 16.dp, end = 16.dp)
                     .zIndex(10f) // Ensure FAB is above everything
             ) {
-                 LargeFloatingActionButton(
+                 MediumFloatingActionButton(
                     onClick = { showSortSheet = true },
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                     shape = AbsoluteSmoothCornerShape(24.dp, 60)
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.Menu,
+                        imageVector = Icons.Rounded.MoreVert,
                         contentDescription = "Options",
                         modifier = Modifier.size(28.dp)
                     )
@@ -535,48 +559,53 @@ fun ArtistSectionItem(
         shape = AbsoluteSmoothCornerShape(24.dp, 60),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(vertical = 16.dp)) {
+        Column(modifier = Modifier) {
             // Header
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 0.dp)
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                 Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
                 ) {
-                    if (!artistImageUrl.isNullOrEmpty()) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(artistImageUrl)
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = section.artistName,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Rounded.Person,
-                            contentDescription = "Generic Artist",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(10.dp).fillMaxSize()
-                        )
+                     Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (!artistImageUrl.isNullOrEmpty()) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(LocalContext.current)
+                                    .data(artistImageUrl)
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = section.artistName,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Rounded.Person,
+                                contentDescription = "Generic Artist",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(10.dp).fillMaxSize()
+                            )
+                        }
                     }
+                    
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = section.artistName,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
-                
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    text = section.artistName,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
             }
             
             //Spacer(Modifier.height(8.dp))
@@ -597,7 +626,7 @@ fun AlbumSectionItem(
     onMoreOptionsClick: (Song) -> Unit
 ) {
      Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.5f)),
         shape = AbsoluteSmoothCornerShape(24.dp, 60),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -684,7 +713,7 @@ fun AlbumSectionItemInArtist(
                      onMoreOptionsClick = onMoreOptionsClick
                  )
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
         }
     }
 }

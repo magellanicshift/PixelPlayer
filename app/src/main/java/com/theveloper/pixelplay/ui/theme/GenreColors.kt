@@ -71,10 +71,18 @@ object GenreThemeUtils {
         return androidx.compose.ui.graphics.Color(android.graphics.Color.HSVToColor(hsv))
     }
 
-    private fun androidx.compose.ui.graphics.Color.contrastColor(): androidx.compose.ui.graphics.Color {
-        // Calculate luminance using standard formula
+    private fun androidx.compose.ui.graphics.Color.contrastContentColor(): androidx.compose.ui.graphics.Color {
+        // Calculate luminance
         val luminance = (0.299 * red + 0.587 * green + 0.114 * blue)
-        return if (luminance > 0.5) androidx.compose.ui.graphics.Color.Black else androidx.compose.ui.graphics.Color.White
+        
+        // If background is dark (luminance <= 0.5), we want a light color (Pastel).
+        // If background is light (luminance > 0.5), we want a dark color (Deep Tone).
+        // mixing 90% white or 90% black retains some hue (10%) while ensuring high contrast.
+        return if (luminance <= 0.5) {
+             androidx.compose.ui.graphics.lerp(this, androidx.compose.ui.graphics.Color.White, 0.9f)
+        } else {
+             androidx.compose.ui.graphics.lerp(this, androidx.compose.ui.graphics.Color.Black, 0.9f)
+        }
     }
 
     @androidx.compose.runtime.Composable
@@ -99,14 +107,14 @@ object GenreThemeUtils {
             onPrimaryContainer = themeColor.onContainer,
             
             secondary = secondarySeed,
-            onSecondary = secondarySeed.contrastColor(), 
+            onSecondary = secondarySeed.contrastContentColor(), 
             secondaryContainer = secondarySeed, // Solid container
-            onSecondaryContainer = secondarySeed.contrastColor(),
+            onSecondaryContainer = secondarySeed.contrastContentColor(),
             
             tertiary = tertiarySeed,
-            onTertiary = tertiarySeed.contrastColor(),
+            onTertiary = tertiarySeed.contrastContentColor(),
             tertiaryContainer = tertiarySeed, // Solid container
-            onTertiaryContainer = tertiarySeed.contrastColor(),
+            onTertiaryContainer = tertiarySeed.contrastContentColor(),
             
             surface = themeColor.container // Tinted surface for contrast
         )
