@@ -174,25 +174,23 @@ class CastStateHolder @Inject constructor(
     private val mediaRouterCallback = object : MediaRouter.Callback() {
         override fun onRouteAdded(router: MediaRouter, route: MediaRouter.RouteInfo) {
             updateRoutes()
+            syncSelectedRouteFromRouter(router)
         }
         override fun onRouteRemoved(router: MediaRouter, route: MediaRouter.RouteInfo) {
             updateRoutes()
+            syncSelectedRouteFromRouter(router)
         }
         override fun onRouteChanged(router: MediaRouter, route: MediaRouter.RouteInfo) {
             updateRoutes()
-            if (route.id == _selectedRoute.value?.id) {
-                _selectedRoute.value = route
-                _routeVolume.value = route.volume
-            }
+            syncSelectedRouteFromRouter(router)
         }
         override fun onRouteSelected(router: MediaRouter, route: MediaRouter.RouteInfo) {
-            _selectedRoute.value = route
-            _routeVolume.value = route.volume
+            updateRoutes()
+            syncSelectedRouteFromRouter(router)
         }
         override fun onRouteUnselected(router: MediaRouter, route: MediaRouter.RouteInfo, reason: Int) {
-            if (route.id == _selectedRoute.value?.id) {
-                 // Might default to something else, handled by onRouteSelected
-            }
+            updateRoutes()
+            syncSelectedRouteFromRouter(router)
         }
         override fun onRouteVolumeChanged(router: MediaRouter, route: MediaRouter.RouteInfo) {
              if (route.id == _selectedRoute.value?.id) {
@@ -229,14 +227,14 @@ class CastStateHolder @Inject constructor(
                 MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY or MediaRouter.CALLBACK_FLAG_PERFORM_ACTIVE_SCAN
             )
             updateRoutes()
-            _selectedRoute.value = mediaRouter.selectedRoute
+            syncSelectedRouteFromRouter(mediaRouter)
             
             kotlinx.coroutines.delay(1800) 
             
             mediaRouter.removeCallback(mediaRouterCallback)
             mediaRouter.addCallback(mediaRouteSelector, mediaRouterCallback, MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY)
             updateRoutes()
-            _selectedRoute.value = mediaRouter.selectedRoute
+            syncSelectedRouteFromRouter(mediaRouter)
             _isRefreshingRoutes.value = false
         }
     }
@@ -245,10 +243,17 @@ class CastStateHolder @Inject constructor(
         val mediaRouteSelector = buildCastRouteSelector()
         mediaRouter.addCallback(mediaRouteSelector, mediaRouterCallback, MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY)
         updateRoutes()
+        syncSelectedRouteFromRouter(mediaRouter)
     }
 
     private fun updateRoutes() {
         _castRoutes.value = mediaRouter.routes.filter { it.isCastRoute() }.distinctBy { it.id }
+    }
+
+    private fun syncSelectedRouteFromRouter(router: MediaRouter) {
+        val selected = router.selectedRoute
+        _selectedRoute.value = selected
+        _routeVolume.value = selected.volume
     }
 
     fun selectRoute(route: MediaRouter.RouteInfo) {
@@ -262,6 +267,8 @@ class CastStateHolder @Inject constructor(
     
     fun disconnect() {
         mediaRouter.selectRoute(mediaRouter.defaultRoute)
+        syncSelectedRouteFromRouter(mediaRouter)
+        updateRoutes()
     }
     
     fun onCleared() {

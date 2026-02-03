@@ -199,16 +199,27 @@ fun CastBottomSheet(
         if (isWifiEnabled) {
             addAll(
                 availableRoutes.map { route ->
+                    val isRouteActive = activeRoute?.id == route.id
+                    val normalizedConnectionState = when {
+                        isRouteActive && isCastConnecting ->
+                            MediaRouter.RouteInfo.CONNECTION_STATE_CONNECTING
+                        isRouteActive && isRemoteSession ->
+                            MediaRouter.RouteInfo.CONNECTION_STATE_CONNECTED
+                        route.connectionState == MediaRouter.RouteInfo.CONNECTION_STATE_CONNECTED ->
+                            MediaRouter.RouteInfo.CONNECTION_STATE_DISCONNECTED
+                        else -> route.connectionState
+                    }
+
                     CastDeviceUi(
                         id = route.id,
                         name = route.name,
                         deviceType = route.deviceType,
                         playbackType = route.playbackType,
-                        connectionState = route.connectionState,
+                        connectionState = normalizedConnectionState,
                         volumeHandling = route.volumeHandling,
                         volume = route.volume,
                         volumeMax = route.volumeMax,
-                        isSelected = activeRoute?.id == route.id
+                        isSelected = isRouteActive
                     )
                 }
             )
@@ -1334,7 +1345,8 @@ private fun CastDeviceRow(
 
                 val statusText = when {
                     device.isBluetooth -> "Bluetooth Audio"
-                    device.connectionState == MediaRouter.RouteInfo.CONNECTION_STATE_CONNECTED -> "Connected"
+                    device.isSelected && device.connectionState == MediaRouter.RouteInfo.CONNECTION_STATE_CONNECTED -> "Connected"
+                    device.isSelected && device.connectionState == MediaRouter.RouteInfo.CONNECTION_STATE_CONNECTING -> "Connecting"
                     else -> "Available"
                 }
 

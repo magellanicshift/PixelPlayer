@@ -33,6 +33,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CompletableDeferred
 import org.json.JSONObject
 import timber.log.Timber
+import kotlin.math.abs
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -91,6 +92,7 @@ class CastTransferStateHolder @Inject constructor(
     private var remoteProgressListener: RemoteMediaClient.ProgressListener? = null
     private var castSessionManagerListener: SessionManagerListener<CastSession>? = null
     private var remoteProgressObserverJob: Job? = null
+    private var remoteStatusRefreshJob: Job? = null
 
     fun initialize(
         scope: CoroutineScope,
@@ -140,6 +142,18 @@ class CastTransferStateHolder @Inject constructor(
             override fun onStatusUpdated() {
                 handleRemoteStatusUpdate()
             }
+
+            override fun onMetadataUpdated() {
+                handleRemoteStatusUpdate()
+            }
+
+            override fun onQueueStatusUpdated() {
+                handleRemoteStatusUpdate()
+            }
+
+            override fun onPreloadStatusUpdated() {
+                handleRemoteStatusUpdate()
+            }
         }
 
         castSessionManagerListener = object : SessionManagerListener<CastSession> {
@@ -182,6 +196,9 @@ class CastTransferStateHolder @Inject constructor(
         if (currentSession != null) {
             currentSession.remoteMediaClient?.registerCallback(remoteMediaClientCallback!!)
             currentSession.remoteMediaClient?.addProgressListener(remoteProgressListener!!, 1000)
+            startRemoteProgressObserver()
+            playbackStateHolder.startProgressUpdates()
+            currentSession.remoteMediaClient?.requestStatus()
         }
     }
 
@@ -203,6 +220,14 @@ class CastTransferStateHolder @Inject constructor(
         val currentSongId = currentRemoteItem?.customData?.optString("songId")
         val streamPosition = mediaStatus.streamPosition
 
+        if (castStateHolder.isRemotelySeeking.value) {
+            val expectedPosition = castStateHolder.remotePosition.value
+            // Unlock remote seek as soon as Cast reports the new position within tolerance.
+            if (abs(streamPosition - expectedPosition) <= 1500L) {
+                castStateHolder.setRemotelySeeking(false)
+            }
+        }
+
         val pendingId = pendingRemoteSongId
         val pendingIsFresh = pendingId != null &&
             SystemClock.elapsedRealtime() - pendingRemoteSongMarkedAt < 4000
@@ -222,13 +247,21 @@ class CastTransferStateHolder @Inject constructor(
              playbackStateHolder.updateStablePlayerState { it.copy(currentPosition = streamPosition) } // UI sync
         }
 
+        var queueForUi = getCurrentQueue?.invoke() ?: emptyList()
         if (newQueue.isNotEmpty()) {
-             val isShrunkSubset = newQueue.size < lastRemoteQueue.size && newQueue.all { song ->
-                 lastRemoteQueue.any { it.id == song.id }
-             }
-             if (!isShrunkSubset || lastRemoteQueue.isEmpty()) {
-                 lastRemoteQueue = newQueue
-             }
+            val isShrunkSubset = newQueue.size < lastRemoteQueue.size && newQueue.all { song ->
+                lastRemoteQueue.any { it.id == song.id }
+            }
+            if (!isShrunkSubset || lastRemoteQueue.isEmpty()) {
+                lastRemoteQueue = newQueue
+                queueForUi = newQueue
+            } else {
+                // Some Cast status updates report only a small window of the queue
+                // (often current + next). Keep the last known full queue in UI.
+                queueForUi = if (lastRemoteQueue.isNotEmpty()) lastRemoteQueue else queueForUi
+            }
+        } else if (lastRemoteQueue.isNotEmpty()) {
+            queueForUi = lastRemoteQueue
         }
         
         // Update current song
@@ -251,11 +284,8 @@ class CastTransferStateHolder @Inject constructor(
                 }
             }
             ?: lastRemoteQueue.firstOrNull { it.id == lastRemoteSongId }
-            
-        if (currentSongFallback?.id != playbackStateHolder.stablePlayerState.value.currentSong?.id) {
-             // Pass callback to generate colors or handle it in PlayerViewModel observing stablePlayerState
-             onSongChanged?.invoke(currentSongFallback?.albumArtUriString)
-        }
+
+        val songChanged = currentSongFallback?.id != playbackStateHolder.stablePlayerState.value.currentSong?.id
 
         val isPlaying = mediaStatus.playerState == MediaStatus.PLAYER_STATE_PLAYING
         lastKnownRemoteIsPlaying = isPlaying
@@ -269,6 +299,8 @@ class CastTransferStateHolder @Inject constructor(
                      currentPosition = streamPosition,
                      totalDuration = remoteMediaClient.streamDuration,
                      currentSong = currentSongFallback,
+                     lyrics = if (songChanged) null else it.lyrics,
+                     isLoadingLyrics = if (songChanged && currentSongFallback != null) true else it.isLoadingLyrics,
                      isPlaying = isPlaying,
                      repeatMode = if (mediaStatus.queueRepeatMode == MediaStatus.REPEAT_MODE_REPEAT_SINGLE) Player.REPEAT_MODE_ONE
                                   else if (mediaStatus.queueRepeatMode == MediaStatus.REPEAT_MODE_REPEAT_ALL || mediaStatus.queueRepeatMode == MediaStatus.REPEAT_MODE_REPEAT_ALL_AND_SHUFFLE) Player.REPEAT_MODE_ALL
@@ -277,13 +309,16 @@ class CastTransferStateHolder @Inject constructor(
                  )
              }
         }
+
+        if (songChanged) {
+            // Trigger theme + dependent UI updates only after state has the new song.
+            onSongChanged?.invoke(currentSongFallback?.albumArtUriString)
+        }
         
         // Update Queue if changed
         val previousQueue = getCurrentQueue?.invoke() ?: emptyList()
-        val queueForUi = if (newQueue.isNotEmpty()) newQueue else previousQueue
-        
-        if (newQueue.isNotEmpty() && newQueue != previousQueue) {
-             updateQueue?.invoke(newQueue)
+        if (queueForUi.isNotEmpty() && queueForUi != previousQueue) {
+             updateQueue?.invoke(queueForUi)
         }
         
         if (castSession != null && (newQueue.isNotEmpty() || previousQueue.isNotEmpty())) {
@@ -295,6 +330,7 @@ class CastTransferStateHolder @Inject constructor(
         scope?.launch {
             castStateHolder.setPendingCastRouteId(null)
             castStateHolder.setCastConnecting(true)
+            castStateHolder.setRemotelySeeking(false)
             
             if (!ensureHttpServerRunning()) {
                 castStateHolder.setCastConnecting(false)
@@ -355,6 +391,9 @@ class CastTransferStateHolder @Inject constructor(
                     if (!success) {
                        onDisconnect?.invoke()
                        castStateHolder.setCastConnecting(false)
+                    } else {
+                        playbackStateHolder.startProgressUpdates()
+                        session.remoteMediaClient?.requestStatus()
                     }
                     castStateHolder.setRemotePlaybackActive(success)
                     castStateHolder.setCastConnecting(false)
@@ -369,23 +408,38 @@ class CastTransferStateHolder @Inject constructor(
     }
     
     private fun startRemoteProgressObserver() {
-         remoteProgressObserverJob?.cancel()
-         remoteProgressObserverJob = scope?.launch {
-             castStateHolder.remotePosition.collect { position ->
-                 playbackStateHolder.updateStablePlayerState { it.copy(currentPosition = position) }
-             }
-         }
+        remoteProgressObserverJob?.cancel()
+        remoteStatusRefreshJob?.cancel()
+
+        remoteProgressObserverJob = scope?.launch {
+            castStateHolder.remotePosition.collect { position ->
+                playbackStateHolder.updateStablePlayerState { it.copy(currentPosition = position) }
+            }
+        }
+
+        remoteStatusRefreshJob = scope?.launch {
+            while (true) {
+                val remoteClient = castStateHolder.castSession.value?.remoteMediaClient
+                if (remoteClient == null) {
+                    delay(1000)
+                    continue
+                }
+                remoteClient.requestStatus()
+                delay(1000)
+            }
+        }
     }
     
     suspend fun stopServerAndTransferBack() {
-        val startMs = SystemClock.elapsedRealtime()
+        remoteProgressObserverJob?.cancel()
+        remoteStatusRefreshJob?.cancel()
+        castStateHolder.setRemotelySeeking(false)
         val session = castStateHolder.castSession.value ?: return
         val remoteMediaClient = session.remoteMediaClient
          
         // Cleanup callbacks
         remoteMediaClient?.removeProgressListener(remoteProgressListener!!)
         remoteMediaClient?.unregisterCallback(remoteMediaClientCallback!!)
-        remoteProgressObserverJob?.cancel()
         
         val liveStatus = remoteMediaClient?.mediaStatus
         val lastKnownStatus = liveStatus ?: lastRemoteMediaStatus
@@ -504,7 +558,9 @@ class CastTransferStateHolder @Inject constructor(
     suspend fun ensureHttpServerRunning(): Boolean {
         if (MediaFileHttpServerService.isServerRunning) return true
         
-        val intent = Intent(context, MediaFileHttpServerService::class.java)
+        val intent = Intent(context, MediaFileHttpServerService::class.java).apply {
+            action = MediaFileHttpServerService.ACTION_START_SERVER
+        }
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -520,8 +576,16 @@ class CastTransferStateHolder @Inject constructor(
             if (MediaFileHttpServerService.isServerRunning && MediaFileHttpServerService.serverAddress != null) {
                 return true
             }
+            if (MediaFileHttpServerService.lastFailureReason != null) {
+                Timber.tag(CAST_LOG_TAG).w(
+                    "Media server failed to start: %s",
+                    MediaFileHttpServerService.lastFailureReason
+                )
+                return false
+            }
             delay(100)
         }
+        Timber.tag(CAST_LOG_TAG).w("Timed out waiting for media server startup")
         return false
     }
 
@@ -567,6 +631,8 @@ class CastTransferStateHolder @Inject constructor(
                         onDisconnect?.invoke()
                     } else {
                         castStateHolder.setRemotePlaybackActive(true)
+                        playbackStateHolder.startProgressUpdates()
+                        castStateHolder.castSession.value?.remoteMediaClient?.requestStatus()
                     }
                     completionDeferred.complete(success)
                 }
@@ -582,11 +648,20 @@ class CastTransferStateHolder @Inject constructor(
         lastRemoteSongId = song.id
         lastRemoteItemId = null
         Timber.tag(CAST_LOG_TAG).d("Marked pending remote song: %s", song.id)
-        
-        playbackStateHolder.updateStablePlayerState { state -> state.copy(currentSong = song) }
+
+        val songChanged = playbackStateHolder.stablePlayerState.value.currentSong?.id != song.id
+        playbackStateHolder.updateStablePlayerState { state ->
+            state.copy(
+                currentSong = song,
+                lyrics = if (songChanged) null else state.lyrics,
+                isLoadingLyrics = if (songChanged) true else state.isLoadingLyrics
+            )
+        }
         onSheetVisible?.invoke()
-        
-        onSongChanged?.invoke(song.albumArtUriString)
+
+        if (songChanged) {
+            onSongChanged?.invoke(song.albumArtUriString)
+        }
 
         val queue = getCurrentQueue?.invoke() ?: lastRemoteQueue
         val updatedQueue = if (queue.any { it.id == song.id } || queue.isEmpty()) {

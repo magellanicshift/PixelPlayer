@@ -4,6 +4,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.IBinder
 import androidx.core.net.toUri
 import com.theveloper.pixelplay.data.repository.MusicRepository
@@ -23,7 +24,11 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.FileInputStream
+import java.io.InputStream
+import java.io.OutputStream
 import java.net.Inet4Address
+import java.util.Locale
 import javax.inject.Inject
 import timber.log.Timber
 
@@ -57,12 +62,16 @@ class MediaFileHttpServerService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_START_SERVER) {
-            // Ensure we are in foreground immediately if started this way
-            startForegroundService()
-            startServer()
-        } else if (intent?.action == ACTION_STOP_SERVER) {
-            stopSelf()
+        when (intent?.action) {
+            ACTION_STOP_SERVER -> stopSelf()
+            ACTION_START_SERVER, null -> {
+                // Ensure we are in foreground immediately if started this way.
+                startForegroundService()
+                startServer()
+            }
+            else -> {
+                Timber.w("Ignoring unknown media server action: %s", intent.action)
+            }
         }
         return START_NOT_STICKY
     }
@@ -130,12 +139,14 @@ class MediaFileHttpServerService : Service() {
 
                                 try {
                                     val uri = song.contentUriString.toUri()
-                                    // Use 'use' to ensure the FileDescriptor is closed
+                                    val contentType = resolveAudioContentType(
+                                        song.mimeType ?: contentResolver.getType(uri)
+                                    )
                                     contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
                                         val fileSize = pfd.statSize
                                         val rangeHeader = call.request.headers[HttpHeaders.Range]
 
-                                        if (rangeHeader != null) {
+                                        if (rangeHeader != null && fileSize > 0) {
                                             val rangesSpecifier = io.ktor.http.parseRangesSpecifier(rangeHeader)
                                             val ranges = rangesSpecifier?.ranges
 
@@ -168,30 +179,28 @@ class MediaFileHttpServerService : Service() {
                                                 return@use
                                             }
 
-                                            val inputStream = java.io.FileInputStream(pfd.fileDescriptor)
-
-                                            var skipped = 0L
-                                            while (skipped < clampedStart) {
-                                                val s = inputStream.skip(clampedStart - skipped)
-                                                if (s <= 0) break
-                                                skipped += s
-                                            }
-
                                             call.response.header(HttpHeaders.ContentRange, "bytes $clampedStart-$clampedEnd/$fileSize")
                                             call.response.header(HttpHeaders.AcceptRanges, "bytes")
+                                            call.response.header(HttpHeaders.ContentLength, length.toString())
 
-                                            val bytes = withContext(Dispatchers.IO) {
-                                                inputStream.readNBytes(length.toInt())
+                                            call.respondOutputStream(contentType, HttpStatusCode.PartialContent) {
+                                                FileInputStream(pfd.fileDescriptor).use { inputStream ->
+                                                    if (!skipFully(inputStream, clampedStart)) {
+                                                        return@use
+                                                    }
+                                                    copyLimited(inputStream, this, length)
+                                                }
                                             }
-
-                                            call.respondBytes(bytes, ContentType.Audio.MPEG, HttpStatusCode.PartialContent)
                                         } else {
-                                            val inputStream = java.io.FileInputStream(pfd.fileDescriptor)
-                                            call.response.header(HttpHeaders.AcceptRanges, "bytes")
-                                            val bytes = withContext(Dispatchers.IO) {
-                                                inputStream.readBytes()
+                                            if (fileSize > 0) {
+                                                call.response.header(HttpHeaders.AcceptRanges, "bytes")
+                                                call.response.header(HttpHeaders.ContentLength, fileSize.toString())
                                             }
-                                            call.respondBytes(bytes, ContentType.Audio.MPEG)
+                                            call.respondOutputStream(contentType) {
+                                                FileInputStream(pfd.fileDescriptor).use { inputStream ->
+                                                    inputStream.copyTo(this)
+                                                }
+                                            }
                                         }
                                     } ?: run {
                                         call.respond(HttpStatusCode.NotFound, "File not found")
@@ -236,24 +245,66 @@ class MediaFileHttpServerService : Service() {
     private fun getIpAddress(context: Context): String? {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-        // Prefer IPv4 Wi-Fi addresses; fall back to any non-loopback address so the server can bind.
-        val networks = connectivityManager.allNetworks
-        val wifiNetworkAddress = networks.asSequence()
+        // Cast playback needs a LAN-reachable address (Wi-Fi/Ethernet), not mobile/VPN.
+        val localLanAddress = connectivityManager.allNetworks.asSequence()
             .mapNotNull { network ->
                 val caps = connectivityManager.getNetworkCapabilities(network)
                 val linkProps = connectivityManager.getLinkProperties(network)
-                if (caps?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) == true && linkProps != null) {
-                    linkProps.linkAddresses.firstOrNull { it.address is Inet4Address }
-                } else null
+                if (caps?.isLocalLanTransport() == true && linkProps != null) {
+                    linkProps.linkAddresses
+                        .asSequence()
+                        .mapNotNull { it.address as? Inet4Address }
+                        .firstOrNull { !it.isLoopbackAddress && !it.isLinkLocalAddress }
+                } else {
+                    null
+                }
             }
             .firstOrNull()
 
-        val fallbackAddress = connectivityManager.activeNetwork?.let { active ->
-            connectivityManager.getLinkProperties(active)?.linkAddresses?.firstOrNull { !it.address.isLoopbackAddress }
-        }
+        return localLanAddress?.hostAddress
+    }
 
-        val chosenAddress = wifiNetworkAddress ?: fallbackAddress
-        return chosenAddress?.address?.hostAddress
+    private fun NetworkCapabilities.isLocalLanTransport(): Boolean {
+        return hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+            hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+    }
+
+    private fun resolveAudioContentType(mimeType: String?): ContentType {
+        val normalized = mimeType
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.lowercase(Locale.ROOT)
+            ?: return ContentType.Audio.MPEG
+
+        return runCatching { ContentType.parse(normalized) }
+            .getOrElse { ContentType.Audio.MPEG }
+    }
+
+    private fun skipFully(inputStream: InputStream, bytesToSkip: Long): Boolean {
+        var remaining = bytesToSkip
+        while (remaining > 0) {
+            val skipped = inputStream.skip(remaining)
+            if (skipped > 0) {
+                remaining -= skipped
+                continue
+            }
+            if (inputStream.read() == -1) {
+                return false
+            }
+            remaining--
+        }
+        return true
+    }
+
+    private fun copyLimited(inputStream: InputStream, outputStream: OutputStream, length: Long) {
+        var remaining = length
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        while (remaining > 0) {
+            val read = inputStream.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
+            if (read == -1) break
+            outputStream.write(buffer, 0, read)
+            remaining -= read.toLong()
+        }
     }
 
     override fun onDestroy() {

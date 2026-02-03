@@ -11,6 +11,7 @@ import com.google.android.gms.common.images.WebImage
 import com.theveloper.pixelplay.data.model.Song
 import org.json.JSONObject
 import timber.log.Timber
+import java.util.Locale
 
 class CastPlayer(private val castSession: CastSession) {
 
@@ -94,23 +95,53 @@ class CastPlayer(private val castSession: CastSession) {
     }
 
     private fun Song.toMediaQueueItem(serverAddress: String): MediaQueueItem {
+        val encodedSongId = Uri.encode(this.id)
+        val contentType = resolveCastContentType()
+
         val mediaMetadata = MediaMetadata(MediaMetadata.MEDIA_TYPE_MUSIC_TRACK)
         mediaMetadata.putString(MediaMetadata.KEY_TITLE, this.title)
-        mediaMetadata.putString(MediaMetadata.KEY_ARTIST, this.artist)
-        val artUrl = "$serverAddress/art/${this.id}"
+        mediaMetadata.putString(MediaMetadata.KEY_ARTIST, this.displayArtist)
+        val artUrl = "$serverAddress/art/$encodedSongId"
         mediaMetadata.addImage(WebImage(Uri.parse(artUrl)))
 
-        val mediaUrl = "$serverAddress/song/${this.id}"
+        val mediaUrl = "$serverAddress/song/$encodedSongId"
         val mediaInfo = MediaInfo.Builder(mediaUrl)
             .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
-            .setContentType("audio/mpeg")
-            .setStreamDuration(this.duration)
+            .setContentType(contentType)
+            .setStreamDuration(this.duration.coerceAtLeast(0L))
             .setMetadata(mediaMetadata)
             .build()
 
         return MediaQueueItem.Builder(mediaInfo)
-            .setCustomData(JSONObject().put("songId", this.id))
+            .setCustomData(
+                JSONObject()
+                    .put("songId", this.id)
+                    .put("mimeType", contentType)
+            )
             .build()
+    }
+
+    private fun Song.resolveCastContentType(): String {
+        val normalizedMimeType = mimeType
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.lowercase(Locale.ROOT)
+
+        if (normalizedMimeType != null && normalizedMimeType.startsWith("audio/")) {
+            return normalizedMimeType
+        }
+
+        val extension = path.substringAfterLast('.', "").lowercase(Locale.ROOT)
+        return when (extension) {
+            "mp3" -> "audio/mpeg"
+            "flac" -> "audio/flac"
+            "aac" -> "audio/aac"
+            "m4a", "mp4" -> "audio/mp4"
+            "wav" -> "audio/wav"
+            "ogg", "oga" -> "audio/ogg"
+            "opus" -> "audio/ogg"
+            else -> "audio/mpeg"
+        }
     }
 
     fun seek(position: Long) {
@@ -130,26 +161,60 @@ class CastPlayer(private val castSession: CastSession) {
     }
 
     fun play() {
-        remoteMediaClient?.play()
+        remoteMediaClient?.play()?.setResultCallback {
+            if (!it.status.isSuccess) {
+                Timber.w("Remote failed to play: %s", it.status.statusMessage)
+            }
+            remoteMediaClient?.requestStatus()
+        }
     }
 
     fun pause() {
-        remoteMediaClient?.pause()
+        remoteMediaClient?.pause()?.setResultCallback {
+            if (!it.status.isSuccess) {
+                Timber.w("Remote failed to pause: %s", it.status.statusMessage)
+            }
+            remoteMediaClient?.requestStatus()
+        }
     }
 
     fun next() {
-        remoteMediaClient?.queueNext(null)?.setResultCallback {
+        val client = remoteMediaClient ?: return
+        val status = client.mediaStatus
+        val queueItems = status?.queueItems ?: emptyList()
+        val currentItemId = status?.currentItemId
+        val currentIndex = queueItems.indexOfFirst { it.itemId == currentItemId }
+        val nextItem = if (currentIndex >= 0) queueItems.getOrNull(currentIndex + 1) else null
+
+        if (nextItem != null) {
+            jumpToItem(nextItem.itemId, 0L)
+            return
+        }
+
+        client.queueNext(null)?.setResultCallback {
             if (!it.status.isSuccess) {
-                Timber.w("Remote failed to advance to next item: ${it.status.statusMessage}")
+                Timber.w("Remote failed to advance to next item: %s", it.status.statusMessage)
             }
             remoteMediaClient?.requestStatus()
         }
     }
 
     fun previous() {
-        remoteMediaClient?.queuePrev(null)?.setResultCallback {
+        val client = remoteMediaClient ?: return
+        val status = client.mediaStatus
+        val queueItems = status?.queueItems ?: emptyList()
+        val currentItemId = status?.currentItemId
+        val currentIndex = queueItems.indexOfFirst { it.itemId == currentItemId }
+        val previousItem = if (currentIndex > 0) queueItems.getOrNull(currentIndex - 1) else null
+
+        if (previousItem != null) {
+            jumpToItem(previousItem.itemId, 0L)
+            return
+        }
+
+        client.queuePrev(null)?.setResultCallback {
             if (!it.status.isSuccess) {
-                Timber.w("Remote failed to go to previous item: ${it.status.statusMessage}")
+                Timber.w("Remote failed to go to previous item: %s", it.status.statusMessage)
             }
             remoteMediaClient?.requestStatus()
         }

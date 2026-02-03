@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.service.MusicNotificationProvider
 import com.google.android.gms.cast.MediaStatus
@@ -44,6 +45,7 @@ class PlaybackStateHolder @Inject constructor(
 
     // Internal State
     private var isSeeking = false
+    private var remoteSeekUnlockJob: Job? = null
 
     fun initialize(coroutineScope: CoroutineScope) {
         this.scope = coroutineScope
@@ -68,9 +70,11 @@ class PlaybackStateHolder @Inject constructor(
         if (castSession != null && remoteMediaClient != null) {
             if (remoteMediaClient.isPlaying) {
                 castStateHolder.castPlayer?.pause()
+                _stablePlayerState.update { it.copy(isPlaying = false) }
             } else {
                 if (remoteMediaClient.mediaQueue != null && remoteMediaClient.mediaQueue.itemCount > 0) {
                     castStateHolder.castPlayer?.play()
+                    _stablePlayerState.update { it.copy(isPlaying = true) }
                 } else {
                     Timber.w("Remote queue empty, cannot resume.")
                 }
@@ -88,10 +92,22 @@ class PlaybackStateHolder @Inject constructor(
     fun seekTo(position: Long) {
         val castSession = castStateHolder.castSession.value
         if (castSession != null && castSession.remoteMediaClient != null) {
+            val targetPosition = position.coerceAtLeast(0L)
             castStateHolder.setRemotelySeeking(true)
-            castStateHolder.setRemotePosition(position)
-            castStateHolder.castPlayer?.seek(position)
+            castStateHolder.setRemotePosition(targetPosition)
+            _stablePlayerState.update { it.copy(currentPosition = targetPosition) }
+            castStateHolder.castPlayer?.seek(targetPosition)
+
+            remoteSeekUnlockJob?.cancel()
+            remoteSeekUnlockJob = scope?.launch {
+                // Fail-safe: never keep remote seeking lock indefinitely.
+                delay(1800)
+                castStateHolder.setRemotelySeeking(false)
+                castSession.remoteMediaClient?.requestStatus()
+            }
         } else {
+            remoteSeekUnlockJob?.cancel()
+            castStateHolder.setRemotelySeeking(false)
             mediaController?.seekTo(position)
             _stablePlayerState.update { it.copy(currentPosition = position) }
         }
@@ -191,11 +207,23 @@ class PlaybackStateHolder @Inject constructor(
                 
                 if (isRemote) {
                     val remoteClient = castSession?.remoteMediaClient
-                    if (remoteClient != null && remoteClient.isPlaying) {
-                        val currentPosition = remoteClient.approximateStreamPosition
-                        val duration = remoteClient.streamDuration
+                    if (remoteClient != null) {
+                        val isRemotePlaying = remoteClient.isPlaying
+                        val currentPosition = remoteClient.approximateStreamPosition.coerceAtLeast(0L)
+                        val duration = remoteClient.streamDuration.coerceAtLeast(0L)
+                        val isRemotelySeeking = castStateHolder.isRemotelySeeking.value
+                        if (!isRemotelySeeking) {
+                            castStateHolder.setRemotePosition(currentPosition)
+                        }
+
+                        listeningStatsTracker.onProgress(currentPosition, isRemotePlaying)
+
                         _stablePlayerState.update {
-                             it.copy(currentPosition = currentPosition, totalDuration = duration)
+                             it.copy(
+                                 currentPosition = if (isRemotelySeeking) it.currentPosition else currentPosition,
+                                 totalDuration = duration,
+                                 isPlaying = isRemotePlaying
+                             )
                         }
                     }
                 } else {
