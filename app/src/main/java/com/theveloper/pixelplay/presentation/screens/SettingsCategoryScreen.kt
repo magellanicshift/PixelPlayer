@@ -236,168 +236,157 @@ fun SettingsCategoryScreen(
             item {
                // Use a simple Column for now, or ExpressiveSettingsGroup if preferred strictly for items
                Column(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(Color.Transparent) 
+                    modifier = Modifier.background(Color.Transparent)
                ) {
                     when (category) {
                         SettingsCategory.LIBRARY -> {
-                             SettingsItem(
-                                title = "Excluded Directories",
-                                subtitle = "Folders here will be skipped when scanning your library.",
-                                leadingIcon = { Icon(Icons.Outlined.Folder, null, tint = MaterialTheme.colorScheme.secondary) },
-                                trailingIcon = { Icon(Icons.Rounded.ChevronRight, "Open", tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                                onClick = {
-                                    val hasAllFilesPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                        Environment.isExternalStorageManager()
-                                    } else true
+                            SettingsSubsection(title = "Library Structure") {
+                                SettingsItem(
+                                    title = "Excluded Directories",
+                                    subtitle = "Folders here will be skipped when scanning your library.",
+                                    leadingIcon = { Icon(Icons.Outlined.Folder, null, tint = MaterialTheme.colorScheme.secondary) },
+                                    trailingIcon = { Icon(Icons.Rounded.ChevronRight, "Open", tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                    onClick = {
+                                        val hasAllFilesPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                            Environment.isExternalStorageManager()
+                                        } else true
 
-                                    if (!hasAllFilesPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                        val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                                        intent.data = "package:${context.packageName}".toUri()
-                                        context.startActivity(intent)
-                                        return@SettingsItem
+                                        if (!hasAllFilesPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                            val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                                            intent.data = "package:${context.packageName}".toUri()
+                                            context.startActivity(intent)
+                                            return@SettingsItem
+                                        }
+
+                                        showExplorerSheet = true
+                                        if (!isExplorerReady && !isExplorerPriming) {
+                                            settingsViewModel.primeExplorer()
+                                        }
                                     }
+                                )
+                                SettingsItem(
+                                    title = "Artists",
+                                    subtitle = "Multi-artist parsing and organization options.",
+                                    leadingIcon = { Icon(Icons.Outlined.Person, null, tint = MaterialTheme.colorScheme.secondary) },
+                                    trailingIcon = { Icon(Icons.Rounded.ChevronRight, "Open", tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                    onClick = { navController.navigate(Screen.ArtistSettings.route) }
+                                )
+                            }
 
-                                    showExplorerSheet = true
-                                    if (!isExplorerReady && !isExplorerPriming) {
-                                        settingsViewModel.primeExplorer()
+                            SettingsSubsection(title = "Sync and Scanning") {
+                                RefreshLibraryItem(
+                                    isSyncing = isSyncing,
+                                    syncProgress = syncProgress,
+                                    onFullSync = {
+                                        if (isSyncing) return@RefreshLibraryItem
+                                        refreshRequested = true
+                                        Toast.makeText(context, "Full rescan started…", Toast.LENGTH_SHORT).show()
+                                        settingsViewModel.fullSyncLibrary()
+                                    },
+                                    onRebuild = {
+                                        if (isSyncing) return@RefreshLibraryItem
+                                        showRebuildDatabaseWarning = true
                                     }
-                                }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            RefreshLibraryItem(
-                                isSyncing = isSyncing,
-                                syncProgress = syncProgress,
-                                onFullSync = {
-                                    if (isSyncing) return@RefreshLibraryItem
-                                    refreshRequested = true
-                                    Toast.makeText(context, "Full rescan started…", Toast.LENGTH_SHORT).show()
-                                    settingsViewModel.fullSyncLibrary()
-                                },
-                                onRebuild = {
-                                    if (isSyncing) return@RefreshLibraryItem
-                                    showRebuildDatabaseWarning = true
-                                }
-                            )
+                                )
+                                SwitchSettingItem(
+                                    title = "Auto-scan .lrc files",
+                                    subtitle = "Automatically scan and assign .lrc files in the same folder during library sync.",
+                                    checked = uiState.autoScanLrcFiles,
+                                    onCheckedChange = { settingsViewModel.setAutoScanLrcFiles(it) },
+                                    leadingIcon = { Icon(Icons.Outlined.Folder, null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                            }
 
-                            Spacer(Modifier.height(4.dp))
-
-                            SettingsItem(
-                                title = "Reset Imported Lyrics",
-                                subtitle = "Remove all imported lyrics from the database.",
-                                leadingIcon = { Icon(Icons.Outlined.ClearAll, null, tint = MaterialTheme.colorScheme.secondary) },
-                                onClick = { showClearLyricsDialog = true }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            ThemeSelectorItem(
-                                label = "Lyrics Source Priority",
-                                description = "Choose which source to try first when fetching lyrics.",
-                                options = mapOf(
-                                    LyricsSourcePreference.EMBEDDED_FIRST.name to "Embedded First",
-                                    LyricsSourcePreference.API_FIRST.name to "Online First",
-                                    LyricsSourcePreference.LOCAL_FIRST.name to "Local (.lrc) First"
-                                ),
-                                selectedKey = uiState.lyricsSourcePreference.name,
-                                onSelectionChanged = { key ->
-                                    settingsViewModel.setLyricsSourcePreference(
-                                        LyricsSourcePreference.fromName(key)
-                                    )
-                                },
-                                leadingIcon = { Icon(painterResource(R.drawable.rounded_lyrics_24), null, tint = MaterialTheme.colorScheme.secondary) }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            SwitchSettingItem(
-                                title = "Auto-scan .lrc files",
-                                subtitle = "Automatically scan and assign .lrc files in the same folder during library sync.",
-                                checked = uiState.autoScanLrcFiles,
-                                onCheckedChange = { settingsViewModel.setAutoScanLrcFiles(it) },
-                                leadingIcon = { Icon(Icons.Outlined.Folder, null, tint = MaterialTheme.colorScheme.secondary) }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            SettingsItem(
-                                title = "Artists",
-                                subtitle = "Multi-artist parsing and organization options.",
-                                leadingIcon = { Icon(Icons.Outlined.Person, null, tint = MaterialTheme.colorScheme.secondary) },
-                                trailingIcon = { Icon(Icons.Rounded.ChevronRight, "Open", tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                                onClick = { navController.navigate(Screen.ArtistSettings.route) }
-                            )
+                            SettingsSubsection(
+                                title = "Lyrics Management",
+                                addBottomSpace = false
+                            ) {
+                                ThemeSelectorItem(
+                                    label = "Lyrics Source Priority",
+                                    description = "Choose which source to try first when fetching lyrics.",
+                                    options = mapOf(
+                                        LyricsSourcePreference.EMBEDDED_FIRST.name to "Embedded First",
+                                        LyricsSourcePreference.API_FIRST.name to "Online First",
+                                        LyricsSourcePreference.LOCAL_FIRST.name to "Local (.lrc) First"
+                                    ),
+                                    selectedKey = uiState.lyricsSourcePreference.name,
+                                    onSelectionChanged = { key ->
+                                        settingsViewModel.setLyricsSourcePreference(
+                                            LyricsSourcePreference.fromName(key)
+                                        )
+                                    },
+                                    leadingIcon = { Icon(painterResource(R.drawable.rounded_lyrics_24), null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                                SettingsItem(
+                                    title = "Reset Imported Lyrics",
+                                    subtitle = "Remove all imported lyrics from the database.",
+                                    leadingIcon = { Icon(Icons.Outlined.ClearAll, null, tint = MaterialTheme.colorScheme.secondary) },
+                                    onClick = { showClearLyricsDialog = true }
+                                )
+                            }
                         }
                         SettingsCategory.APPEARANCE -> {
                             val useSmoothCorners by settingsViewModel.useSmoothCorners.collectAsState()
 
-                            SwitchSettingItem(
-                                title = "Use Smooth Corners",
-                                subtitle = "Use complex shaped corners effectively improving aesthetics but may affect performance on low-end devices",
-                                checked = useSmoothCorners,
-                                onCheckedChange = settingsViewModel::setUseSmoothCorners,
-                                leadingIcon = { Icon(painterResource(R.drawable.rounded_rounded_corner_24), null, tint = MaterialTheme.colorScheme.secondary) }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            
-                            ThemeSelectorItem(
-                                label = "App Theme",
-                                description = "Switch between light, dark, or follow system appearance.",
-                                options = mapOf(
-                                    AppThemeMode.LIGHT to "Light Theme",
-                                    AppThemeMode.DARK to "Dark Theme",
-                                    AppThemeMode.FOLLOW_SYSTEM to "Follow System"
-                                ),
-                                selectedKey = uiState.appThemeMode,
-                                onSelectionChanged = { settingsViewModel.setAppThemeMode(it) },
-                                leadingIcon = { Icon(Icons.Outlined.LightMode, null, tint = MaterialTheme.colorScheme.secondary) }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            ThemeSelectorItem(
-                                label = "Player Theme",
-                                description = "Choose the appearance for the floating player.",
-                                options = mapOf(
-                                    ThemePreference.ALBUM_ART to "Album Art",
-                                    ThemePreference.DYNAMIC to "System Dynamic"
-                                ),
-                                selectedKey = uiState.playerThemePreference,
-                                onSelectionChanged = { settingsViewModel.setPlayerThemePreference(it) },
-                                leadingIcon = { Icon(Icons.Outlined.PlayCircle, null, tint = MaterialTheme.colorScheme.secondary) }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            ThemeSelectorItem(
-                                label = "NavBar Style",
-                                description = "Choose the appearance for the navigation bar.",
-                                options = mapOf(
-                                    NavBarStyle.DEFAULT to "Default",
-                                    NavBarStyle.FULL_WIDTH to "Full Width"
-                                ),
-                                selectedKey = uiState.navBarStyle,
-                                onSelectionChanged = { settingsViewModel.setNavBarStyle(it) },
-                                leadingIcon = { Icon(Icons.Outlined.Style, null, tint = MaterialTheme.colorScheme.secondary) }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            SwitchSettingItem(
-                                title = "Immersive Lyrics",
-                                subtitle = "Auto-hide controls and enlarge text.",
-                                checked = uiState.immersiveLyricsEnabled,
-                                onCheckedChange = { settingsViewModel.setImmersiveLyricsEnabled(it) },
-                                leadingIcon = { Icon(painterResource(R.drawable.rounded_lyrics_24), null, tint = MaterialTheme.colorScheme.secondary) }
-                            )
-
-                            if (uiState.immersiveLyricsEnabled) {
-                                Spacer(Modifier.height(4.dp))
+                            SettingsSubsection(title = "Global Theme") {
                                 ThemeSelectorItem(
-                                    label = "Auto-hide Delay",
-                                    description = "Time before controls hide.",
+                                    label = "App Theme",
+                                    description = "Switch between light, dark, or follow system appearance.",
                                     options = mapOf(
-                                        "3000" to "3s",
-                                        "4000" to "4s",
-                                        "5000" to "5s",
-                                        "6000" to "6s"
+                                        AppThemeMode.LIGHT to "Light Theme",
+                                        AppThemeMode.DARK to "Dark Theme",
+                                        AppThemeMode.FOLLOW_SYSTEM to "Follow System"
                                     ),
-                                    selectedKey = uiState.immersiveLyricsTimeout.toString(),
-                                    onSelectionChanged = { settingsViewModel.setImmersiveLyricsTimeout(it.toLong()) },
-                                    leadingIcon = { Icon(Icons.Rounded.Timer, null, tint = MaterialTheme.colorScheme.secondary) }
+                                    selectedKey = uiState.appThemeMode,
+                                    onSelectionChanged = { settingsViewModel.setAppThemeMode(it) },
+                                    leadingIcon = { Icon(Icons.Outlined.LightMode, null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                                SwitchSettingItem(
+                                    title = "Use Smooth Corners",
+                                    subtitle = "Use complex shaped corners effectively improving aesthetics but may affect performance on low-end devices",
+                                    checked = useSmoothCorners,
+                                    onCheckedChange = settingsViewModel::setUseSmoothCorners,
+                                    leadingIcon = { Icon(painterResource(R.drawable.rounded_rounded_corner_24), null, tint = MaterialTheme.colorScheme.secondary) }
                                 )
                             }
-                            // if (uiState.navBarStyle == NavBarStyle.DEFAULT) { // Allow for both modes now
-                                Spacer(Modifier.height(4.dp))
+
+                            SettingsSubsection(title = "Now Playing") {
+                                ThemeSelectorItem(
+                                    label = "Player Theme",
+                                    description = "Choose the appearance for the floating player.",
+                                    options = mapOf(
+                                        ThemePreference.ALBUM_ART to "Album Art",
+                                        ThemePreference.DYNAMIC to "System Dynamic"
+                                    ),
+                                    selectedKey = uiState.playerThemePreference,
+                                    onSelectionChanged = { settingsViewModel.setPlayerThemePreference(it) },
+                                    leadingIcon = { Icon(Icons.Outlined.PlayCircle, null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                                ThemeSelectorItem(
+                                    label = "Carousel Style",
+                                    description = "Choose the appearance for the album carousel.",
+                                    options = mapOf(
+                                        CarouselStyle.NO_PEEK to "No Peek",
+                                        CarouselStyle.ONE_PEEK to "One Peek"
+                                    ),
+                                    selectedKey = uiState.carouselStyle,
+                                    onSelectionChanged = { settingsViewModel.setCarouselStyle(it) },
+                                    leadingIcon = { Icon(painterResource(R.drawable.rounded_view_carousel_24), null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                            }
+
+                            SettingsSubsection(title = "Navigation Bar") {
+                                ThemeSelectorItem(
+                                    label = "NavBar Style",
+                                    description = "Choose the appearance for the navigation bar.",
+                                    options = mapOf(
+                                        NavBarStyle.DEFAULT to "Default",
+                                        NavBarStyle.FULL_WIDTH to "Full Width"
+                                    ),
+                                    selectedKey = uiState.navBarStyle,
+                                    onSelectionChanged = { settingsViewModel.setNavBarStyle(it) },
+                                    leadingIcon = { Icon(Icons.Outlined.Style, null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
                                 SettingsItem(
                                     title = "NavBar Corner Radius",
                                     subtitle = "Adjust the corner radius of the navigation bar.",
@@ -405,251 +394,293 @@ fun SettingsCategoryScreen(
                                     trailingIcon = { Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                                     onClick = { navController.navigate("nav_bar_corner_radius") }
                                 )
-                            //}
-                            Spacer(Modifier.height(4.dp))
-                            ThemeSelectorItem(
-                                label = "Carousel Style",
-                                description = "Choose the appearance for the album carousel.",
-                                options = mapOf(
-                                    CarouselStyle.NO_PEEK to "No Peek",
-                                    CarouselStyle.ONE_PEEK to "One Peek"
-                                ),
-                                selectedKey = uiState.carouselStyle,
-                                onSelectionChanged = { settingsViewModel.setCarouselStyle(it) },
-                                leadingIcon = { Icon(painterResource(R.drawable.rounded_view_carousel_24), null, tint = MaterialTheme.colorScheme.secondary) }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            ThemeSelectorItem(
-                                label = "Default Tab",
-                                description = "Choose the Default launch tab.",
-                                options = mapOf(
-                                    LaunchTab.HOME to "Home",
-                                    LaunchTab.SEARCH to "Search",
-                                    LaunchTab.LIBRARY to "Library",
-                                ),
-                                selectedKey = uiState.launchTab,
-                                onSelectionChanged = { settingsViewModel.setLaunchTab(it) },
-                                leadingIcon = { Icon(painterResource(R.drawable.tab_24), null, tint = MaterialTheme.colorScheme.secondary) }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            ThemeSelectorItem(
-                                label = "Library Navigation",
-                                description = "Choose how to move between Library tabs.",
-                                options = mapOf(
-                                    LibraryNavigationMode.TAB_ROW to "Tab row (default)",
-                                    LibraryNavigationMode.COMPACT_PILL to "Compact pill & grid"
-                                ),
-                                selectedKey = uiState.libraryNavigationMode,
-                                onSelectionChanged = { settingsViewModel.setLibraryNavigationMode(it) },
-                                leadingIcon = { Icon(painterResource(R.drawable.rounded_library_music_24), null, tint = MaterialTheme.colorScheme.secondary) }
-                            )
-                        }
-                        SettingsCategory.PLAYBACK -> {
-                            ThemeSelectorItem(
-                                label = "Keep playing after closing",
-                                description = "If off, removing the app from recents will stop playback.",
-                                options = mapOf("true" to "On", "false" to "Off"),
-                                selectedKey = if (uiState.keepPlayingInBackground) "true" else "false",
-                                onSelectionChanged = { settingsViewModel.setKeepPlayingInBackground(it.toBoolean()) },
-                                leadingIcon = { Icon(Icons.Rounded.MusicNote, null, tint = MaterialTheme.colorScheme.secondary) }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            ThemeSelectorItem(
-                                label = "Auto-play on cast connect/disconnect",
-                                description = "Start playing immediately after switching cast connections.",
-                                options = mapOf("false" to "Enabled", "true" to "Disabled"),
-                                selectedKey = if (uiState.disableCastAutoplay) "true" else "false",
-                                onSelectionChanged = { settingsViewModel.setDisableCastAutoplay(it.toBoolean()) },
-                                leadingIcon = { Icon(painterResource(R.drawable.rounded_cast_24), null, tint = MaterialTheme.colorScheme.secondary) }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            ThemeSelectorItem(
-                                label = "Crossfade",
-                                description = "Enable smooth transition between songs.",
-                                options = mapOf("true" to "Enabled", "false" to "Disabled"),
-                                selectedKey = if (uiState.isCrossfadeEnabled) "true" else "false",
-                                onSelectionChanged = { settingsViewModel.setCrossfadeEnabled(it.toBoolean()) },
-                                leadingIcon = { Icon(painterResource(R.drawable.rounded_align_justify_space_even_24), null, tint = MaterialTheme.colorScheme.secondary) }
-                            )
-                            if (uiState.isCrossfadeEnabled) {
-                                Spacer(Modifier.height(4.dp))
-                                SliderSettingsItem(
-                                    label = "Crossfade Duration",
-                                    value = uiState.crossfadeDuration.toFloat(),
-                                    valueRange = 2000f..12000f,
-                                    onValueChange = { settingsViewModel.setCrossfadeDuration(it.toInt()) },
-                                    valueText = { value -> "${(value / 1000).toInt()}s" }
-                                )
                             }
-                            Spacer(Modifier.height(4.dp))
-                            SwitchSettingItem(
-                                title = "Persistent Shuffle",
-                                subtitle = "Remember shuffle setting even after closing the app.",
-                                checked = uiState.persistentShuffleEnabled,
-                                onCheckedChange = { settingsViewModel.setPersistentShuffleEnabled(it) },
-                                leadingIcon = { Icon(painterResource(R.drawable.rounded_shuffle_24), null, tint = MaterialTheme.colorScheme.secondary) }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            SwitchSettingItem(
-                                title = "Show queue history",
-                                subtitle = "Show previously played songs in the queue.",
-                                checked = uiState.showQueueHistory,
-                                onCheckedChange = { settingsViewModel.setShowQueueHistory(it) },
-                                leadingIcon = { Icon(painterResource(R.drawable.rounded_queue_music_24), null, tint = MaterialTheme.colorScheme.secondary) }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            SettingsItem(
-                                title = "Battery Optimization",
-                                subtitle = "Disable battery optimization to prevent playback interruptions.",
-                                onClick = {
-                                    val powerManager = context.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
-                                    if (powerManager.isIgnoringBatteryOptimizations(context.packageName)) {
-                                        Toast.makeText(context, "Battery optimization is already disabled", Toast.LENGTH_SHORT).show()
-                                        return@SettingsItem
-                                    }
-                                    try {
-                                        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                                            data = "package:${context.packageName}".toUri()
-                                        }
-                                        context.startActivity(intent)
-                                    } catch (e: Exception) {
-                                        try {
-                                            val fallbackIntent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                                            context.startActivity(fallbackIntent)
-                                        } catch (e2: Exception) {
-                                            Toast.makeText(context, "Could not open battery settings", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                },
-                                leadingIcon = { Icon(painterResource(R.drawable.rounded_all_inclusive_24), null, tint = MaterialTheme.colorScheme.secondary) }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            SwitchSettingItem(
-                                title = "Tap background closes player",
-                                subtitle = "Tap the blurred background to close the player sheet.",
-                                checked = uiState.tapBackgroundClosesPlayer,
-                                onCheckedChange = { settingsViewModel.setTapBackgroundClosesPlayer(it) },
-                                leadingIcon = { Icon(painterResource(R.drawable.rounded_touch_app_24), null, tint = MaterialTheme.colorScheme.secondary) }
-                            )
-                        }
-                        SettingsCategory.AI_INTEGRATION -> {
-                            GeminiApiKeyItem(
-                                apiKey = geminiApiKey,
-                                onApiKeySave = { settingsViewModel.onGeminiApiKeyChange(it) },
-                                title = "Gemini API Key",
-                                subtitle = "Needed for AI-powered features."
-                            )
-                            
-                            // Show loading, error, or model selector based on state
-                            if (uiState.isLoadingModels) {
-                                Spacer(Modifier.height(8.dp))
-                                Surface(
-                                    color = MaterialTheme.colorScheme.surfaceContainer,
-                                    shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(16.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                    ) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(24.dp),
-                                            strokeWidth = 2.dp
-                                        )
-                                        Text(
-                                            text = "Loading available models...",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            } else if (uiState.modelsFetchError != null) {
-                                Spacer(Modifier.height(8.dp))
-                                Surface(
-                                    color = MaterialTheme.colorScheme.errorContainer,
-                                    shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        text = uiState.modelsFetchError ?: "Error loading models",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onErrorContainer,
-                                        modifier = Modifier.padding(16.dp)
+
+                            SettingsSubsection(title = "Lyrics Screen") {
+                                SwitchSettingItem(
+                                    title = "Immersive Lyrics",
+                                    subtitle = "Auto-hide controls and enlarge text.",
+                                    checked = uiState.immersiveLyricsEnabled,
+                                    onCheckedChange = { settingsViewModel.setImmersiveLyricsEnabled(it) },
+                                    leadingIcon = { Icon(painterResource(R.drawable.rounded_lyrics_24), null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+
+                                if (uiState.immersiveLyricsEnabled) {
+                                    ThemeSelectorItem(
+                                        label = "Auto-hide Delay",
+                                        description = "Time before controls hide.",
+                                        options = mapOf(
+                                            "3000" to "3s",
+                                            "4000" to "4s",
+                                            "5000" to "5s",
+                                            "6000" to "6s"
+                                        ),
+                                        selectedKey = uiState.immersiveLyricsTimeout.toString(),
+                                        onSelectionChanged = { settingsViewModel.setImmersiveLyricsTimeout(it.toLong()) },
+                                        leadingIcon = { Icon(Icons.Rounded.Timer, null, tint = MaterialTheme.colorScheme.secondary) }
                                     )
                                 }
-                            } else if (uiState.availableModels.isNotEmpty()) {
-                                Spacer(Modifier.height(8.dp))
+                            }
+
+                            SettingsSubsection(
+                                title = "App Navigation",
+                                addBottomSpace = false
+                            ) {
                                 ThemeSelectorItem(
-                                    label = "AI Model",
-                                    description = "Select the Gemini model to use.",
-                                    options = uiState.availableModels.associate { it.name to it.displayName },
-                                    selectedKey = geminiModel.ifEmpty { uiState.availableModels.firstOrNull()?.name ?: "" },
-                                    onSelectionChanged = { settingsViewModel.onGeminiModelChange(it) },
-                                    leadingIcon = { Icon(Icons.Rounded.Science, null, tint = MaterialTheme.colorScheme.secondary) }
+                                    label = "Default Tab",
+                                    description = "Choose the Default launch tab.",
+                                    options = mapOf(
+                                        LaunchTab.HOME to "Home",
+                                        LaunchTab.SEARCH to "Search",
+                                        LaunchTab.LIBRARY to "Library",
+                                    ),
+                                    selectedKey = uiState.launchTab,
+                                    onSelectionChanged = { settingsViewModel.setLaunchTab(it) },
+                                    leadingIcon = { Icon(painterResource(R.drawable.tab_24), null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                                ThemeSelectorItem(
+                                    label = "Library Navigation",
+                                    description = "Choose how to move between Library tabs.",
+                                    options = mapOf(
+                                        LibraryNavigationMode.TAB_ROW to "Tab row (default)",
+                                        LibraryNavigationMode.COMPACT_PILL to "Compact pill & grid"
+                                    ),
+                                    selectedKey = uiState.libraryNavigationMode,
+                                    onSelectionChanged = { settingsViewModel.setLibraryNavigationMode(it) },
+                                    leadingIcon = { Icon(painterResource(R.drawable.rounded_library_music_24), null, tint = MaterialTheme.colorScheme.secondary) }
                                 )
                             }
-                            
-                            // System Prompt
-                            Spacer(Modifier.height(8.dp))
-                            GeminiSystemPromptItem(
-                                systemPrompt = geminiSystemPrompt,
-                                defaultPrompt = com.theveloper.pixelplay.data.preferences.UserPreferencesRepository.DEFAULT_SYSTEM_PROMPT,
-                                onSystemPromptSave = { settingsViewModel.onGeminiSystemPromptChange(it) },
-                                onReset = { settingsViewModel.resetGeminiSystemPrompt() },
-                                title = "System Prompt",
-                                subtitle = "Customize how the AI behaves."
-                            )
+                        }
+                        SettingsCategory.PLAYBACK -> {
+                            SettingsSubsection(title = "Background Playback") {
+                                ThemeSelectorItem(
+                                    label = "Keep playing after closing",
+                                    description = "If off, removing the app from recents will stop playback.",
+                                    options = mapOf("true" to "On", "false" to "Off"),
+                                    selectedKey = if (uiState.keepPlayingInBackground) "true" else "false",
+                                    onSelectionChanged = { settingsViewModel.setKeepPlayingInBackground(it.toBoolean()) },
+                                    leadingIcon = { Icon(Icons.Rounded.MusicNote, null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                                SettingsItem(
+                                    title = "Battery Optimization",
+                                    subtitle = "Disable battery optimization to prevent playback interruptions.",
+                                    onClick = {
+                                        val powerManager = context.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+                                        if (powerManager.isIgnoringBatteryOptimizations(context.packageName)) {
+                                            Toast.makeText(context, "Battery optimization is already disabled", Toast.LENGTH_SHORT).show()
+                                            return@SettingsItem
+                                        }
+                                        try {
+                                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                                data = "package:${context.packageName}".toUri()
+                                            }
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            try {
+                                                val fallbackIntent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                                context.startActivity(fallbackIntent)
+                                            } catch (e2: Exception) {
+                                                Toast.makeText(context, "Could not open battery settings", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    },
+                                    leadingIcon = { Icon(painterResource(R.drawable.rounded_all_inclusive_24), null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                            }
+
+                            SettingsSubsection(title = "Cast") {
+                                ThemeSelectorItem(
+                                    label = "Auto-play on cast connect/disconnect",
+                                    description = "Start playing immediately after switching cast connections.",
+                                    options = mapOf("false" to "Enabled", "true" to "Disabled"),
+                                    selectedKey = if (uiState.disableCastAutoplay) "true" else "false",
+                                    onSelectionChanged = { settingsViewModel.setDisableCastAutoplay(it.toBoolean()) },
+                                    leadingIcon = { Icon(painterResource(R.drawable.rounded_cast_24), null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                            }
+
+                            SettingsSubsection(title = "Queue and Transitions") {
+                                ThemeSelectorItem(
+                                    label = "Crossfade",
+                                    description = "Enable smooth transition between songs.",
+                                    options = mapOf("true" to "Enabled", "false" to "Disabled"),
+                                    selectedKey = if (uiState.isCrossfadeEnabled) "true" else "false",
+                                    onSelectionChanged = { settingsViewModel.setCrossfadeEnabled(it.toBoolean()) },
+                                    leadingIcon = { Icon(painterResource(R.drawable.rounded_align_justify_space_even_24), null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                                if (uiState.isCrossfadeEnabled) {
+                                    SliderSettingsItem(
+                                        label = "Crossfade Duration",
+                                        value = uiState.crossfadeDuration.toFloat(),
+                                        valueRange = 2000f..12000f,
+                                        onValueChange = { settingsViewModel.setCrossfadeDuration(it.toInt()) },
+                                        valueText = { value -> "${(value / 1000).toInt()}s" }
+                                    )
+                                }
+                                SwitchSettingItem(
+                                    title = "Persistent Shuffle",
+                                    subtitle = "Remember shuffle setting even after closing the app.",
+                                    checked = uiState.persistentShuffleEnabled,
+                                    onCheckedChange = { settingsViewModel.setPersistentShuffleEnabled(it) },
+                                    leadingIcon = { Icon(painterResource(R.drawable.rounded_shuffle_24), null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                                SwitchSettingItem(
+                                    title = "Show queue history",
+                                    subtitle = "Show previously played songs in the queue.",
+                                    checked = uiState.showQueueHistory,
+                                    onCheckedChange = { settingsViewModel.setShowQueueHistory(it) },
+                                    leadingIcon = { Icon(painterResource(R.drawable.rounded_queue_music_24), null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                            }
+
+                            SettingsSubsection(
+                                title = "Player Gestures",
+                                addBottomSpace = false
+                            ) {
+                                SwitchSettingItem(
+                                    title = "Tap background closes player",
+                                    subtitle = "Tap the blurred background to close the player sheet.",
+                                    checked = uiState.tapBackgroundClosesPlayer,
+                                    onCheckedChange = { settingsViewModel.setTapBackgroundClosesPlayer(it) },
+                                    leadingIcon = { Icon(painterResource(R.drawable.rounded_touch_app_24), null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                            }
+                        }
+                        SettingsCategory.AI_INTEGRATION -> {
+                            SettingsSubsection(title = "Credentials") {
+                                GeminiApiKeyItem(
+                                    apiKey = geminiApiKey,
+                                    onApiKeySave = { settingsViewModel.onGeminiApiKeyChange(it) },
+                                    title = "Gemini API Key",
+                                    subtitle = "Needed for AI-powered features."
+                                )
+                            }
+
+                            if (uiState.availableModels.isNotEmpty()) {
+                                SettingsSubsection(title = "Model Selection") {
+                                    if (uiState.isLoadingModels) {
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.surfaceContainer,
+                                            shape = RoundedCornerShape(10.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(16.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                            ) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(24.dp),
+                                                    strokeWidth = 2.dp
+                                                )
+                                                Text(
+                                                    text = "Loading available models...",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    } else if (uiState.modelsFetchError != null) {
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.errorContainer,
+                                            shape = RoundedCornerShape(10.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = uiState.modelsFetchError ?: "Error loading models",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                                modifier = Modifier.padding(16.dp)
+                                            )
+                                        }
+                                    } else if (uiState.availableModels.isNotEmpty()) {
+                                        ThemeSelectorItem(
+                                            label = "AI Model",
+                                            description = "Select the Gemini model to use.",
+                                            options = uiState.availableModels.associate { it.name to it.displayName },
+                                            selectedKey = geminiModel.ifEmpty { uiState.availableModels.firstOrNull()?.name ?: "" },
+                                            onSelectionChanged = { settingsViewModel.onGeminiModelChange(it) },
+                                            leadingIcon = { Icon(Icons.Rounded.Science, null, tint = MaterialTheme.colorScheme.secondary) }
+                                        )
+                                    }
+                                }
+                            }
+
+                            SettingsSubsection(
+                                title = "Prompt Behavior",
+                                addBottomSpace = false
+                            ) {
+                                GeminiSystemPromptItem(
+                                    systemPrompt = geminiSystemPrompt,
+                                    defaultPrompt = com.theveloper.pixelplay.data.preferences.UserPreferencesRepository.DEFAULT_SYSTEM_PROMPT,
+                                    onSystemPromptSave = { settingsViewModel.onGeminiSystemPromptChange(it) },
+                                    onReset = { settingsViewModel.resetGeminiSystemPrompt() },
+                                    title = "System Prompt",
+                                    subtitle = "Customize how the AI behaves."
+                                )
+                            }
                         }
                         SettingsCategory.DEVELOPER -> {
-                             SettingsItem(
-                                title = "Experimental",
-                                subtitle = "Player UI loading experiments and toggles.",
-                                leadingIcon = { Icon(Icons.Rounded.Science, null, tint = MaterialTheme.colorScheme.secondary) },
-                                trailingIcon = { Icon(Icons.Rounded.ChevronRight, "Open", tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                                onClick = { navController.navigate(Screen.Experimental.route) }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            ActionSettingsItem(
-                                title = "Force Daily Mix Regeneration",
-                                subtitle = "Re-creates the daily mix playlist immediately.",
-                                icon = { Icon(painterResource(R.drawable.rounded_instant_mix_24), null, tint = MaterialTheme.colorScheme.secondary) },
-                                primaryActionLabel = "Regenerate Daily Mix",
-                                onPrimaryAction = { showRegenerateDailyMixDialog = true }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            ActionSettingsItem(
-                                title = "Force Stats Regeneration",
-                                subtitle = "Clears cache and recalculates playback statistics.",
-                                icon = { Icon(painterResource(R.drawable.rounded_monitoring_24), null, tint = MaterialTheme.colorScheme.secondary) },
-                                primaryActionLabel = "Regenerate Stats",
-                                onPrimaryAction = { showRegenerateStatsDialog = true }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            SettingsItem(
-                                title = "Test Setup Flow",
-                                subtitle = "Launch the onboarding setup screen for testing.",
-                                leadingIcon = { Icon(Icons.Rounded.Science, null, tint = MaterialTheme.colorScheme.tertiary) },
-                                onClick = {
-                                    settingsViewModel.resetSetupFlow()
-                                }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            SettingsItem(
-                                title = "Trigger Test Crash",
-                                subtitle = "Simulate a crash to test the crash reporting system.",
-                                leadingIcon = { Icon(Icons.Outlined.Warning, null, tint = MaterialTheme.colorScheme.error) },
-                                onClick = { settingsViewModel.triggerTestCrash() }
-                            )
+                            SettingsSubsection(title = "Experiments") {
+                                SettingsItem(
+                                    title = "Experimental",
+                                    subtitle = "Player UI loading experiments and toggles.",
+                                    leadingIcon = { Icon(Icons.Rounded.Science, null, tint = MaterialTheme.colorScheme.secondary) },
+                                    trailingIcon = { Icon(Icons.Rounded.ChevronRight, "Open", tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                    onClick = { navController.navigate(Screen.Experimental.route) }
+                                )
+                                SettingsItem(
+                                    title = "Test Setup Flow",
+                                    subtitle = "Launch the onboarding setup screen for testing.",
+                                    leadingIcon = { Icon(Icons.Rounded.Science, null, tint = MaterialTheme.colorScheme.tertiary) },
+                                    onClick = {
+                                        settingsViewModel.resetSetupFlow()
+                                    }
+                                )
+                            }
+
+                            SettingsSubsection(title = "Maintenance") {
+                                ActionSettingsItem(
+                                    title = "Force Daily Mix Regeneration",
+                                    subtitle = "Re-creates the daily mix playlist immediately.",
+                                    icon = { Icon(painterResource(R.drawable.rounded_instant_mix_24), null, tint = MaterialTheme.colorScheme.secondary) },
+                                    primaryActionLabel = "Regenerate Daily Mix",
+                                    onPrimaryAction = { showRegenerateDailyMixDialog = true }
+                                )
+                                ActionSettingsItem(
+                                    title = "Force Stats Regeneration",
+                                    subtitle = "Clears cache and recalculates playback statistics.",
+                                    icon = { Icon(painterResource(R.drawable.rounded_monitoring_24), null, tint = MaterialTheme.colorScheme.secondary) },
+                                    primaryActionLabel = "Regenerate Stats",
+                                    onPrimaryAction = { showRegenerateStatsDialog = true }
+                                )
+                            }
+
+                            SettingsSubsection(
+                                title = "Diagnostics",
+                                addBottomSpace = false
+                            ) {
+                                SettingsItem(
+                                    title = "Trigger Test Crash",
+                                    subtitle = "Simulate a crash to test the crash reporting system.",
+                                    leadingIcon = { Icon(Icons.Outlined.Warning, null, tint = MaterialTheme.colorScheme.error) },
+                                    onClick = { settingsViewModel.triggerTestCrash() }
+                                )
+                            }
                         }
                         SettingsCategory.ABOUT -> {
-                             SettingsItem(
-                                title = "About PixelPlayer",
-                                subtitle = "App version, credits, and more.",
-                                leadingIcon = { Icon(Icons.Outlined.Info, null, tint = MaterialTheme.colorScheme.secondary) },
-                                trailingIcon = { Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                                onClick = { navController.navigate("about") }
-                            )
+                            SettingsSubsection(
+                                title = "Application",
+                                addBottomSpace = false
+                            ) {
+                                SettingsItem(
+                                    title = "About PixelPlayer",
+                                    subtitle = "App version, credits, and more.",
+                                    leadingIcon = { Icon(Icons.Outlined.Info, null, tint = MaterialTheme.colorScheme.secondary) },
+                                    trailingIcon = { Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                    onClick = { navController.navigate("about") }
+                                )
+                            }
                         }
                         SettingsCategory.EQUALIZER -> {
                              // Equalizer has its own screen, so this block is unreachable via standard navigation
@@ -793,5 +824,36 @@ fun SettingsCategoryScreen(
             },
             dismissButton = { TextButton(onClick = { showRegenerateStatsDialog = false }) { Text("Cancel") } }
         )
+    }
+}
+
+@Composable
+private fun SettingsSubsectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 4.dp)
+    )
+}
+
+@Composable
+private fun SettingsSubsection(
+    title: String,
+    addBottomSpace: Boolean = true,
+    content: @Composable () -> Unit
+) {
+    SettingsSubsectionHeader(title)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color.Transparent),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        content()
+    }
+    if (addBottomSpace) {
+        Spacer(modifier = Modifier.height(10.dp))
     }
 }

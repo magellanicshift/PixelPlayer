@@ -3,6 +3,14 @@ package com.theveloper.pixelplay.presentation.navigation
 import DelimiterConfigScreen
 import android.annotation.SuppressLint
 import androidx.annotation.OptIn
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -12,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.IntOffset
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavHostController
@@ -71,10 +80,34 @@ fun AppNavigation(
         ) {
             composable(
                 Screen.Home.route,
-                enterTransition = { enterTransition() },
-                exitTransition = { exitTransition() },
-                popEnterTransition = { popEnterTransition() },
-                popExitTransition = { popExitTransition() },
+                enterTransition = {
+                    mainRootEnterTransition(
+                        fromRoute = initialState.destination.route,
+                        toRoute = targetState.destination.route,
+                        fallback = enterTransition()
+                    )
+                },
+                exitTransition = {
+                    mainRootExitTransition(
+                        fromRoute = initialState.destination.route,
+                        toRoute = targetState.destination.route,
+                        fallback = exitTransition()
+                    )
+                },
+                popEnterTransition = {
+                    mainRootEnterTransition(
+                        fromRoute = initialState.destination.route,
+                        toRoute = targetState.destination.route,
+                        fallback = popEnterTransition()
+                    )
+                },
+                popExitTransition = {
+                    mainRootExitTransition(
+                        fromRoute = initialState.destination.route,
+                        toRoute = targetState.destination.route,
+                        fallback = popExitTransition()
+                    )
+                },
             ) {
                 ScreenWrapper(navController = navController) {
                     HomeScreen(
@@ -87,10 +120,34 @@ fun AppNavigation(
             }
             composable(
                 Screen.Search.route,
-                enterTransition = { enterTransition() },
-                exitTransition = { exitTransition() },
-                popEnterTransition = { popEnterTransition() },
-                popExitTransition = { popExitTransition() },
+                enterTransition = {
+                    mainRootEnterTransition(
+                        fromRoute = initialState.destination.route,
+                        toRoute = targetState.destination.route,
+                        fallback = enterTransition()
+                    )
+                },
+                exitTransition = {
+                    mainRootExitTransition(
+                        fromRoute = initialState.destination.route,
+                        toRoute = targetState.destination.route,
+                        fallback = exitTransition()
+                    )
+                },
+                popEnterTransition = {
+                    mainRootEnterTransition(
+                        fromRoute = initialState.destination.route,
+                        toRoute = targetState.destination.route,
+                        fallback = popEnterTransition()
+                    )
+                },
+                popExitTransition = {
+                    mainRootExitTransition(
+                        fromRoute = initialState.destination.route,
+                        toRoute = targetState.destination.route,
+                        fallback = popExitTransition()
+                    )
+                },
             ) {
                 ScreenWrapper(navController = navController) {
                     SearchScreen(
@@ -103,10 +160,34 @@ fun AppNavigation(
             }
             composable(
                 Screen.Library.route,
-                enterTransition = { enterTransition() },
-                exitTransition = { exitTransition() },
-                popEnterTransition = { popEnterTransition() },
-                popExitTransition = { popExitTransition() },
+                enterTransition = {
+                    mainRootEnterTransition(
+                        fromRoute = initialState.destination.route,
+                        toRoute = targetState.destination.route,
+                        fallback = enterTransition()
+                    )
+                },
+                exitTransition = {
+                    mainRootExitTransition(
+                        fromRoute = initialState.destination.route,
+                        toRoute = targetState.destination.route,
+                        fallback = exitTransition()
+                    )
+                },
+                popEnterTransition = {
+                    mainRootEnterTransition(
+                        fromRoute = initialState.destination.route,
+                        toRoute = targetState.destination.route,
+                        fallback = popEnterTransition()
+                    )
+                },
+                popExitTransition = {
+                    mainRootExitTransition(
+                        fromRoute = initialState.destination.route,
+                        toRoute = targetState.destination.route,
+                        fallback = popExitTransition()
+                    )
+                },
             ) {
                 ScreenWrapper(navController = navController) {
                     LibraryScreen(navController = navController, playerViewModel = playerViewModel)
@@ -370,4 +451,72 @@ private fun String.toRoute(): String = when (this) {
     LaunchTab.SEARCH -> Screen.Search.route
     LaunchTab.LIBRARY -> Screen.Library.route
     else -> Screen.Home.route
+}
+
+private enum class MainRootDirection {
+    FORWARD,
+    BACKWARD
+}
+
+private val MAIN_ROOT_TRANSITION_SPEC =
+    tween<IntOffset>(durationMillis = TRANSITION_DURATION, easing = FastOutSlowInEasing)
+
+private val MAIN_ROOT_FADE_SPEC =
+    tween<Float>(durationMillis = TRANSITION_DURATION, easing = FastOutSlowInEasing)
+
+private fun mainRootDirection(
+    fromRoute: String?,
+    toRoute: String?
+): MainRootDirection? {
+    val fromIndex = mainRootRouteIndex(fromRoute) ?: return null
+    val toIndex = mainRootRouteIndex(toRoute) ?: return null
+    if (fromIndex == toIndex) return null
+    return if (toIndex > fromIndex) MainRootDirection.FORWARD else MainRootDirection.BACKWARD
+}
+
+private fun mainRootRouteIndex(route: String?): Int? = when (route) {
+    Screen.Home.route -> 0
+    Screen.Search.route -> 1
+    Screen.Library.route -> 2
+    else -> null
+}
+
+private fun mainRootEnterTransition(
+    fromRoute: String?,
+    toRoute: String?,
+    fallback: EnterTransition
+): EnterTransition = when (mainRootDirection(fromRoute, toRoute)) {
+    MainRootDirection.FORWARD -> {
+        slideInHorizontally(
+            animationSpec = MAIN_ROOT_TRANSITION_SPEC,
+            initialOffsetX = { it }
+        ) + fadeIn(animationSpec = MAIN_ROOT_FADE_SPEC)
+    }
+    MainRootDirection.BACKWARD -> {
+        slideInHorizontally(
+            animationSpec = MAIN_ROOT_TRANSITION_SPEC,
+            initialOffsetX = { -it }
+        ) + fadeIn(animationSpec = MAIN_ROOT_FADE_SPEC)
+    }
+    null -> fallback
+}
+
+private fun mainRootExitTransition(
+    fromRoute: String?,
+    toRoute: String?,
+    fallback: ExitTransition
+): ExitTransition = when (mainRootDirection(fromRoute, toRoute)) {
+    MainRootDirection.FORWARD -> {
+        slideOutHorizontally(
+            animationSpec = MAIN_ROOT_TRANSITION_SPEC,
+            targetOffsetX = { -it }
+        ) + fadeOut(animationSpec = MAIN_ROOT_FADE_SPEC)
+    }
+    MainRootDirection.BACKWARD -> {
+        slideOutHorizontally(
+            animationSpec = MAIN_ROOT_TRANSITION_SPEC,
+            targetOffsetX = { it }
+        ) + fadeOut(animationSpec = MAIN_ROOT_FADE_SPEC)
+    }
+    null -> fallback
 }

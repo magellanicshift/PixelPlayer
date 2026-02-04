@@ -3016,10 +3016,13 @@ fun AlbumListItem(
                         
                         Text(
                             album.title,
-                            style = variableTextStyle.copy(fontSize = 18.sp),
+                            style = variableTextStyle.copy(fontSize = 22.sp),
                             color = onGradientColor,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(
+                            modifier = Modifier.height(4.dp)
                         )
                         Text(
                             album.artist,
