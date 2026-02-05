@@ -3,6 +3,7 @@
 package com.theveloper.pixelplay.presentation.screens
 
 import android.os.Trace
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -78,6 +79,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -103,6 +105,7 @@ import com.theveloper.pixelplay.presentation.components.ShimmerBox
 import com.theveloper.pixelplay.data.model.Album
 import com.theveloper.pixelplay.data.model.Artist
 import com.theveloper.pixelplay.data.model.MusicFolder
+import com.theveloper.pixelplay.data.model.FolderSource
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.model.SortOption
 import com.theveloper.pixelplay.presentation.components.MiniPlayerHeight
@@ -225,6 +228,7 @@ fun LibraryScreen(
     val currentTabId by playerViewModel.currentLibraryTabId.collectAsState()
     val libraryNavigationMode by playerViewModel.libraryNavigationMode.collectAsState()
     val isSortSheetVisible by playerViewModel.isSortingSheetVisible.collectAsState()
+    val libraryUiState by playerViewModel.playerUiState.collectAsState()
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
 
     val m3uImportLauncher = rememberLauncherForActivityResult(
@@ -289,6 +293,16 @@ fun LibraryScreen(
                 isRefreshing = false
             }
         }
+    }
+
+    BackHandler(
+        enabled =
+            currentTabId == LibraryTabId.FOLDERS &&
+                libraryUiState.folderBackGestureNavigationEnabled &&
+                libraryUiState.currentFolder != null &&
+                !isSortSheetVisible
+    ) {
+        playerViewModel.navigateBackFolder()
     }
     
     // Feedback for Playlist Creation
@@ -615,6 +629,10 @@ fun LibraryScreen(
                                     onGenerateWithAiClick = { /* Unused now */ },
                                     onImportM3uClick = { m3uImportLauncher.launch("audio/x-mpegurl") },
                                     currentFolder = playerUiState.currentFolder,
+                                    folderRootPath = playerUiState.folderSourceRootPath.ifBlank {
+                                        Environment.getExternalStorageDirectory().path
+                                    },
+                                    folderRootLabel = playerUiState.folderSource.displayName,
                                     onFolderClick = { playerViewModel.navigateToFolder(it) },
                                     onNavigateBack = { playerViewModel.navigateBackFolder() },
                                     isShuffleEnabled = stablePlayerState.isShuffleEnabled
@@ -688,6 +706,52 @@ fun LibraryScreen(
                                                 onClick = { playerViewModel.setAlbumsListView(true) },
                                                 text = "List",
                                                 imageVector = Icons.Rounded.ViewList
+                                            )
+                                        }
+                                    }
+                                } else null,
+                                sourceToggleContent = if (isFoldersTab) {
+                                    {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            val isSdAvailable = playerUiState.isSdCardAvailable
+                                            ToggleSegmentButton(
+                                                modifier = Modifier.weight(1f),
+                                                active = playerUiState.folderSource == FolderSource.INTERNAL,
+                                                activeColor = MaterialTheme.colorScheme.primary,
+                                                inactiveColor = MaterialTheme.colorScheme.surfaceVariant,
+                                                activeContentColor = MaterialTheme.colorScheme.onPrimary,
+                                                inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                activeCornerRadius = 32.dp,
+                                                onClick = { playerViewModel.setFoldersSource(FolderSource.INTERNAL) },
+                                                text = "Internal"
+                                            )
+                                            ToggleSegmentButton(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .alpha(if (isSdAvailable) 1f else 0.5f),
+                                                active = playerUiState.folderSource == FolderSource.SD_CARD,
+                                                activeColor = MaterialTheme.colorScheme.primary,
+                                                inactiveColor = MaterialTheme.colorScheme.surfaceVariant,
+                                                activeContentColor = MaterialTheme.colorScheme.onPrimary,
+                                                inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                activeCornerRadius = 32.dp,
+                                                onClick = {
+                                                    if (isSdAvailable) {
+                                                        playerViewModel.setFoldersSource(FolderSource.SD_CARD)
+                                                    }
+                                                },
+                                                text = "SD Card"
+                                            )
+                                        }
+                                        if (!playerUiState.isSdCardAvailable) {
+                                            Text(
+                                                text = "SD card is not available right now.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(top = 8.dp, start = 2.dp)
                                             )
                                         }
                                     }
@@ -1492,11 +1556,7 @@ fun LibraryFoldersTab(
         }
 
         val flattenedFolders = remember(folders, currentSortOption) {
-            val flattened = flattenFolders(folders)
-            when (currentSortOption) {
-                SortOption.FolderNameZA -> flattened.sortedByDescending { it.name.lowercase() }
-                else -> flattened.sortedBy { it.name.lowercase() }
-            }
+            sortMusicFoldersByOption(flattenFolders(folders), currentSortOption)
         }
 
         val isRoot = targetPath == "root"
@@ -1505,27 +1565,13 @@ fun LibraryFoldersTab(
         val itemsToShow = remember(activeFolder, folders, flattenedFolders, currentSortOption) {
             when {
                 showPlaylistCards -> flattenedFolders
-                activeFolder != null -> {
-                    when (currentSortOption) {
-                        SortOption.FolderNameZA -> activeFolder.subFolders.sortedByDescending { it.name.lowercase() }
-                        else -> activeFolder.subFolders.sortedBy { it.name.lowercase() }
-                    }
-                }
-                else -> {
-                     when (currentSortOption) {
-                        SortOption.FolderNameZA -> folders.sortedByDescending { it.name.lowercase() }
-                        else -> folders.sortedBy { it.name.lowercase() }
-                    }
-                }
+                activeFolder != null -> sortMusicFoldersByOption(activeFolder.subFolders, currentSortOption)
+                else -> sortMusicFoldersByOption(folders, currentSortOption)
             }
         }.toImmutableList()
 
         val songsToShow = remember(activeFolder, currentSortOption) {
-            val songs = activeFolder?.songs ?: emptyList()
-            when (currentSortOption) {
-                SortOption.FolderNameZA -> songs.sortedByDescending { it.title.lowercase() }
-                else -> songs.sortedBy { it.title.lowercase() }
-            }
+            sortSongsForFolderView(activeFolder?.songs ?: emptyList(), currentSortOption)
         }.toImmutableList()
         val shouldShowLoading = isLoading && itemsToShow.isEmpty() && songsToShow.isEmpty() && isRoot
 
@@ -1733,6 +1779,33 @@ private fun flattenFolders(folders: List<MusicFolder>): List<MusicFolder> {
     return folders.flatMap { folder ->
         val current = if (folder.songs.isNotEmpty()) listOf(folder) else emptyList()
         current + flattenFolders(folder.subFolders)
+    }
+}
+
+private fun sortMusicFoldersByOption(folders: List<MusicFolder>, sortOption: SortOption): List<MusicFolder> {
+    return when (sortOption) {
+        SortOption.FolderNameAZ -> folders.sortedBy { it.name.lowercase() }
+        SortOption.FolderNameZA -> folders.sortedByDescending { it.name.lowercase() }
+        SortOption.FolderSongCountAsc -> folders.sortedWith(
+            compareBy<MusicFolder> { it.totalSongCount }.thenBy { it.name.lowercase() }
+        )
+        SortOption.FolderSongCountDesc -> folders.sortedWith(
+            compareByDescending<MusicFolder> { it.totalSongCount }.thenBy { it.name.lowercase() }
+        )
+        SortOption.FolderSubdirCountAsc -> folders.sortedWith(
+            compareBy<MusicFolder> { it.totalSubFolderCount }.thenBy { it.name.lowercase() }
+        )
+        SortOption.FolderSubdirCountDesc -> folders.sortedWith(
+            compareByDescending<MusicFolder> { it.totalSubFolderCount }.thenBy { it.name.lowercase() }
+        )
+        else -> folders.sortedBy { it.name.lowercase() }
+    }
+}
+
+private fun sortSongsForFolderView(songs: List<Song>, sortOption: SortOption): List<Song> {
+    return when (sortOption) {
+        SortOption.FolderNameZA -> songs.sortedByDescending { it.title.lowercase() }
+        else -> songs.sortedBy { it.title.lowercase() }
     }
 }
 

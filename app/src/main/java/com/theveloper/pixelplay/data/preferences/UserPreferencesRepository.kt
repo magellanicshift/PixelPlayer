@@ -14,6 +14,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.media3.common.Player
 import com.theveloper.pixelplay.data.model.Playlist
 import com.theveloper.pixelplay.data.model.SortOption // Added import
+import com.theveloper.pixelplay.data.model.FolderSource
 import com.theveloper.pixelplay.data.model.LyricsSourcePreference
 import com.theveloper.pixelplay.data.model.TransitionSettings
 import com.theveloper.pixelplay.data.equalizer.EqualizerPreset // Added import
@@ -89,6 +90,7 @@ constructor(
         val ALBUMS_SORT_OPTION = stringPreferencesKey("albums_sort_option")
         val ARTISTS_SORT_OPTION = stringPreferencesKey("artists_sort_option")
         val PLAYLISTS_SORT_OPTION = stringPreferencesKey("playlists_sort_option")
+        val FOLDERS_SORT_OPTION = stringPreferencesKey("folders_sort_option")
         val LIKED_SONGS_SORT_OPTION = stringPreferencesKey("liked_songs_sort_option")
 
         // UI State Keys
@@ -109,6 +111,8 @@ constructor(
         val LIBRARY_TABS_ORDER = stringPreferencesKey("library_tabs_order")
         val IS_FOLDER_FILTER_ACTIVE = booleanPreferencesKey("is_folder_filter_active")
         val IS_FOLDERS_PLAYLIST_VIEW = booleanPreferencesKey("is_folders_playlist_view")
+        val FOLDERS_SOURCE = stringPreferencesKey("folders_source")
+        val FOLDER_BACK_GESTURE_NAVIGATION = booleanPreferencesKey("folder_back_gesture_navigation")
         val USE_SMOOTH_CORNERS = booleanPreferencesKey("use_smooth_corners")
         val KEEP_PLAYING_IN_BACKGROUND = booleanPreferencesKey("keep_playing_in_background")
         val IS_CROSSFADE_ENABLED = booleanPreferencesKey("is_crossfade_enabled")
@@ -1034,6 +1038,16 @@ constructor(
                         .storageKey
             }
 
+    val foldersSortOptionFlow: Flow<String> =
+            dataStore.data.map { preferences ->
+                SortOption.fromStorageKey(
+                                preferences[PreferencesKeys.FOLDERS_SORT_OPTION],
+                                SortOption.FOLDERS,
+                                SortOption.FolderNameAZ
+                        )
+                        .storageKey
+            }
+
     val likedSongsSortOptionFlow: Flow<String> =
             dataStore.data.map { preferences ->
                 SortOption.fromStorageKey(
@@ -1067,6 +1081,12 @@ constructor(
     suspend fun setPlaylistsSortOption(optionKey: String) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.PLAYLISTS_SORT_OPTION] = optionKey
+        }
+    }
+
+    suspend fun setFoldersSortOption(optionKey: String) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.FOLDERS_SORT_OPTION] = optionKey
         }
     }
 
@@ -1121,6 +1141,12 @@ constructor(
                     PreferencesKeys.PLAYLISTS_SORT_OPTION,
                     SortOption.PLAYLISTS,
                     SortOption.PlaylistNameAZ
+            )
+            migrateSortPreference(
+                    preferences,
+                    PreferencesKeys.FOLDERS_SORT_OPTION,
+                    SortOption.FOLDERS,
+                    SortOption.FolderNameAZ
             )
             migrateSortPreference(
                     preferences,
@@ -1374,6 +1400,16 @@ constructor(
             preferences[PreferencesKeys.IS_FOLDERS_PLAYLIST_VIEW] ?: false
         }
 
+    val foldersSourceFlow: Flow<FolderSource> = dataStore.data
+        .map { preferences ->
+            FolderSource.fromStorageKey(preferences[PreferencesKeys.FOLDERS_SOURCE])
+        }
+
+    val folderBackGestureNavigationFlow: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.FOLDER_BACK_GESTURE_NAVIGATION] ?: false
+        }
+
     val useSmoothCornersFlow: Flow<Boolean> = dataStore.data
         .map { preferences ->
             preferences[PreferencesKeys.USE_SMOOTH_CORNERS] ?: true
@@ -1388,6 +1424,18 @@ constructor(
     suspend fun setFoldersPlaylistView(isPlaylistView: Boolean) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.IS_FOLDERS_PLAYLIST_VIEW] = isPlaylistView
+        }
+    }
+
+    suspend fun setFoldersSource(source: FolderSource) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.FOLDERS_SOURCE] = source.storageKey
+        }
+    }
+
+    suspend fun setFolderBackGestureNavigation(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.FOLDER_BACK_GESTURE_NAVIGATION] = enabled
         }
     }
 

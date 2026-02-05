@@ -546,6 +546,26 @@ fun SettingsCategoryScreen(
                                 )
                             }
                         }
+                        SettingsCategory.BEHAVIOR -> {
+                            SettingsSubsection(
+                                title = "Folders",
+                                addBottomSpace = false
+                            ) {
+                                SwitchSettingItem(
+                                    title = "Back gesture controls folders",
+                                    subtitle = "In Folders tab, system back navigates folder stack before leaving Library.",
+                                    checked = uiState.folderBackGestureNavigation,
+                                    onCheckedChange = { settingsViewModel.setFolderBackGestureNavigation(it) },
+                                    leadingIcon = {
+                                        Icon(
+                                            painterResource(R.drawable.rounded_touch_app_24),
+                                            null,
+                                            tint = MaterialTheme.colorScheme.secondary
+                                        )
+                                    }
+                                )
+                            }
+                        }
                         SettingsCategory.AI_INTEGRATION -> {
                             SettingsSubsection(title = "Credentials") {
                                 GeminiApiKeyItem(

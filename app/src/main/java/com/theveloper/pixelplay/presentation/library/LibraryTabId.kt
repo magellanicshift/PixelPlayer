@@ -57,7 +57,11 @@ enum class LibraryTabId(
         label = "FOLDERS",
         sortOptions = listOf(
             SortOption.FolderNameAZ,
-            SortOption.FolderNameZA
+            SortOption.FolderNameZA,
+            SortOption.FolderSongCountAsc,
+            SortOption.FolderSongCountDesc,
+            SortOption.FolderSubdirCountAsc,
+            SortOption.FolderSubdirCountDesc
         )
     ),
     Liked(

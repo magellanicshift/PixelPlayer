@@ -45,6 +45,7 @@ data class SettingsUiState(
     val isCrossfadeEnabled: Boolean = true,
     val crossfadeDuration: Int = 6000,
     val persistentShuffleEnabled: Boolean = false,
+    val folderBackGestureNavigation: Boolean = false,
     val lyricsSourcePreference: LyricsSourcePreference = LyricsSourcePreference.EMBEDDED_FIRST,
     val autoScanLrcFiles: Boolean = false,
     val blockedDirectories: Set<String> = emptySet(),
@@ -101,6 +102,7 @@ private sealed interface SettingsUiUpdate {
         val isCrossfadeEnabled: Boolean,
         val crossfadeDuration: Int,
         val persistentShuffleEnabled: Boolean,
+        val folderBackGestureNavigation: Boolean,
         val lyricsSourcePreference: LyricsSourcePreference,
         val autoScanLrcFiles: Boolean,
         val blockedDirectories: Set<String>,
@@ -210,6 +212,7 @@ class SettingsViewModel @Inject constructor(
                 userPreferencesRepository.isCrossfadeEnabledFlow,
                 userPreferencesRepository.crossfadeDurationFlow,
                 userPreferencesRepository.persistentShuffleEnabledFlow,
+                userPreferencesRepository.folderBackGestureNavigationFlow,
                 userPreferencesRepository.lyricsSourcePreferenceFlow,
                 userPreferencesRepository.autoScanLrcFilesFlow,
                 userPreferencesRepository.blockedDirectoriesFlow,
@@ -223,11 +226,12 @@ class SettingsViewModel @Inject constructor(
                     isCrossfadeEnabled = values[3] as Boolean,
                     crossfadeDuration = values[4] as Int,
                     persistentShuffleEnabled = values[5] as Boolean,
-                    lyricsSourcePreference = values[6] as LyricsSourcePreference,
-                    autoScanLrcFiles = values[7] as Boolean,
-                    blockedDirectories = @Suppress("UNCHECKED_CAST") (values[8] as Set<String>),
-                    immersiveLyricsEnabled = values[9] as Boolean,
-                    immersiveLyricsTimeout = values[10] as Long
+                    folderBackGestureNavigation = values[6] as Boolean,
+                    lyricsSourcePreference = values[7] as LyricsSourcePreference,
+                    autoScanLrcFiles = values[8] as Boolean,
+                    blockedDirectories = @Suppress("UNCHECKED_CAST") (values[9] as Set<String>),
+                    immersiveLyricsEnabled = values[10] as Boolean,
+                    immersiveLyricsTimeout = values[11] as Long
                 )
             }.collect { update ->
                 _uiState.update { state ->
@@ -238,6 +242,7 @@ class SettingsViewModel @Inject constructor(
                         isCrossfadeEnabled = update.isCrossfadeEnabled,
                         crossfadeDuration = update.crossfadeDuration,
                         persistentShuffleEnabled = update.persistentShuffleEnabled,
+                        folderBackGestureNavigation = update.folderBackGestureNavigation,
                         lyricsSourcePreference = update.lyricsSourcePreference,
                         autoScanLrcFiles = update.autoScanLrcFiles,
                         blockedDirectories = update.blockedDirectories,
@@ -387,6 +392,12 @@ class SettingsViewModel @Inject constructor(
     fun setPersistentShuffleEnabled(enabled: Boolean) {
         viewModelScope.launch {
             userPreferencesRepository.setPersistentShuffleEnabled(enabled)
+        }
+    }
+
+    fun setFolderBackGestureNavigation(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setFolderBackGestureNavigation(enabled)
         }
     }
 

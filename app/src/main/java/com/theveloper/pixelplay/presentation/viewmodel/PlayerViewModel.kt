@@ -43,6 +43,7 @@ import com.theveloper.pixelplay.data.database.AlbumArtThemeDao
 import com.theveloper.pixelplay.data.media.CoverArtUpdate
 import com.theveloper.pixelplay.data.model.Album
 import com.theveloper.pixelplay.data.model.Artist
+import com.theveloper.pixelplay.data.model.FolderSource
 import com.theveloper.pixelplay.data.model.Genre
 import com.theveloper.pixelplay.data.model.Lyrics
 import com.theveloper.pixelplay.data.model.LyricsSourcePreference
@@ -68,6 +69,8 @@ import com.theveloper.pixelplay.data.worker.SyncManager
 import com.theveloper.pixelplay.utils.AppShortcutManager
 import com.theveloper.pixelplay.utils.QueueUtils
 import com.theveloper.pixelplay.utils.MediaItemBuilder
+import com.theveloper.pixelplay.utils.StorageType
+import com.theveloper.pixelplay.utils.StorageUtils
 import com.theveloper.pixelplay.utils.ZipShareHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -676,6 +679,38 @@ class PlayerViewModel @Inject constructor(
         return SortOption.fromStorageKey(optionKey, allowed, fallback)
     }
 
+    private data class FolderSourceState(
+        val source: FolderSource,
+        val rootPath: String,
+        val isSdCardAvailable: Boolean
+    )
+
+    private fun resolveFolderSourceState(preferredSource: FolderSource): FolderSourceState {
+        val storages = StorageUtils.getAvailableStorages(context)
+        val internalPath = storages
+            .firstOrNull { it.storageType == StorageType.INTERNAL }
+            ?.path
+            ?.path
+            ?: android.os.Environment.getExternalStorageDirectory().path
+        val sdPath = storages
+            .firstOrNull { it.storageType == StorageType.SD_CARD }
+            ?.path
+            ?.path
+
+        val effectiveSource = if (preferredSource == FolderSource.SD_CARD && sdPath == null) {
+            FolderSource.INTERNAL
+        } else {
+            preferredSource
+        }
+
+        val resolvedRootPath = if (effectiveSource == FolderSource.SD_CARD) sdPath!! else internalPath
+        return FolderSourceState(
+            source = effectiveSource,
+            rootPath = resolvedRootPath,
+            isSdCardAvailable = sdPath != null
+        )
+    }
+
     private fun MediaRouter.RouteInfo.isCastRoute(): Boolean {
         return supportsControlCategory(MediaControlIntent.CATEGORY_REMOTE_PLAYBACK) ||
             supportsControlCategory(castControlCategory)
@@ -709,6 +744,33 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             userPreferencesRepository.isFoldersPlaylistViewFlow.collect { isPlaylistView ->
                 setFoldersPlaylistViewState(isPlaylistView)
+            }
+        }
+
+        viewModelScope.launch {
+            userPreferencesRepository.foldersSourceFlow.collect { preferredSource ->
+                val resolved = resolveFolderSourceState(preferredSource)
+                if (resolved.source != preferredSource) {
+                    userPreferencesRepository.setFoldersSource(resolved.source)
+                }
+
+                _playerUiState.update { currentState ->
+                    val sourceChanged = currentState.folderSource != resolved.source ||
+                        currentState.folderSourceRootPath != resolved.rootPath
+                    currentState.copy(
+                        folderSource = resolved.source,
+                        folderSourceRootPath = resolved.rootPath,
+                        isSdCardAvailable = resolved.isSdCardAvailable,
+                        currentFolderPath = if (sourceChanged) null else currentState.currentFolderPath,
+                        currentFolder = if (sourceChanged) null else currentState.currentFolder
+                    )
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            userPreferencesRepository.folderBackGestureNavigationFlow.collect { enabled ->
+                _playerUiState.update { it.copy(folderBackGestureNavigationEnabled = enabled) }
             }
         }
 
@@ -759,6 +821,11 @@ class PlayerViewModel @Inject constructor(
                 SortOption.ARTISTS,
                 SortOption.ArtistNameAZ
             )
+            val initialFolderSort = resolveSortOption(
+                userPreferencesRepository.foldersSortOptionFlow.first(),
+                SortOption.FOLDERS,
+                SortOption.FolderNameAZ
+            )
             val initialLikedSort = resolveSortOption(
                 userPreferencesRepository.likedSongsSortOptionFlow.first(),
                 SortOption.LIKED,
@@ -770,6 +837,7 @@ class PlayerViewModel @Inject constructor(
                     currentSongSortOption = initialSongSort,
                     currentAlbumSortOption = initialAlbumSort,
                     currentArtistSortOption = initialArtistSort,
+                    currentFolderSortOption = initialFolderSort,
                     currentFavoriteSortOption = initialLikedSort
                 )
             }
@@ -779,6 +847,7 @@ class PlayerViewModel @Inject constructor(
             sortSongs(initialSongSort, persist = false)
             sortAlbums(initialAlbumSort, persist = false)
             sortArtists(initialArtistSort, persist = false)
+            sortFolders(initialFolderSort, persist = false)
             sortFavoriteSongs(initialLikedSort, persist = false)
         }
 
@@ -2258,8 +2327,8 @@ class PlayerViewModel @Inject constructor(
         libraryStateHolder.sortFavoriteSongs(sortOption, persist)
     }
 
-    fun sortFolders(sortOption: SortOption) {
-        libraryStateHolder.sortFolders(sortOption)
+    fun sortFolders(sortOption: SortOption, persist: Boolean = true) {
+        libraryStateHolder.sortFolders(sortOption, persist)
     }
 
     fun setFoldersPlaylistView(isPlaylistView: Boolean) {
@@ -2269,8 +2338,16 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    fun setFoldersSource(source: FolderSource) {
+        viewModelScope.launch {
+            userPreferencesRepository.setFoldersSource(source)
+        }
+    }
+
     fun navigateToFolder(path: String) {
-        val storageRootPath = android.os.Environment.getExternalStorageDirectory().path
+        val storageRootPath = _playerUiState.value.folderSourceRootPath.ifBlank {
+            android.os.Environment.getExternalStorageDirectory().path
+        }
         if (path == storageRootPath) {
             _playerUiState.update {
                 it.copy(
@@ -2297,11 +2374,21 @@ class PlayerViewModel @Inject constructor(
             val currentFolder = it.currentFolder
             if (currentFolder != null) {
                 val parentPath = File(currentFolder.path).parent
-                val parentFolder = findFolder(parentPath, _playerUiState.value.musicFolders)
-                it.copy(
-                    currentFolderPath = parentPath,
-                    currentFolder = parentFolder
-                )
+                val sourceRoot = it.folderSourceRootPath.ifBlank {
+                    android.os.Environment.getExternalStorageDirectory().path
+                }
+                if (parentPath == null || parentPath == sourceRoot) {
+                    it.copy(
+                        currentFolderPath = null,
+                        currentFolder = null
+                    )
+                } else {
+                    val parentFolder = findFolder(parentPath, _playerUiState.value.musicFolders)
+                    it.copy(
+                        currentFolderPath = parentPath,
+                        currentFolder = parentFolder
+                    )
+                }
             } else {
                 it
             }

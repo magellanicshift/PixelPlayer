@@ -43,6 +43,10 @@ sealed class SortOption(val storageKey: String, val displayName: String) {
     // Folder Sort Options
     object FolderNameAZ : SortOption("folder_name_az", "Name (A-Z)")
     object FolderNameZA : SortOption("folder_name_za", "Name (Z-A)")
+    object FolderSongCountAsc : SortOption("folder_song_count_asc", "Fewest Songs")
+    object FolderSongCountDesc : SortOption("folder_song_count_desc", "Most Songs")
+    object FolderSubdirCountAsc : SortOption("folder_subdir_count_asc", "Fewest Subfolders")
+    object FolderSubdirCountDesc : SortOption("folder_subdir_count_desc", "Most Subfolders")
 
     companion object {
 
@@ -83,7 +87,11 @@ sealed class SortOption(val storageKey: String, val displayName: String) {
         val FOLDERS: List<SortOption> by lazy {
             listOf(
                 FolderNameAZ,
-                FolderNameZA
+                FolderNameZA,
+                FolderSongCountAsc,
+                FolderSongCountDesc,
+                FolderSubdirCountAsc,
+                FolderSubdirCountDesc
             )
         }
         val LIKED: List<SortOption> by lazy {

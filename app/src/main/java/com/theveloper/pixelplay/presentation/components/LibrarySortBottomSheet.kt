@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
@@ -42,7 +41,6 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.util.fastMaxOf
 import com.theveloper.pixelplay.data.model.SortOption
 import com.theveloper.pixelplay.ui.theme.GoogleSansRounded
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
@@ -58,7 +56,8 @@ fun LibrarySortBottomSheet(
     showViewToggle: Boolean = false,
     viewToggleChecked: Boolean = false,
     onViewToggleChange: (Boolean) -> Unit = {},
-    viewToggleContent: (@Composable () -> Unit)? = null
+    viewToggleContent: (@Composable () -> Unit)? = null,
+    sourceToggleContent: (@Composable () -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -254,6 +253,18 @@ fun LibrarySortBottomSheet(
                         }
                     }
                 }
+            }
+
+            if (sourceToggleContent != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Source",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontFamily = GoogleSansRounded,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 2.dp, top = 8.dp, bottom = 8.dp)
+                )
+                sourceToggleContent()
             }
 
             Spacer(modifier = Modifier.height(16.dp))

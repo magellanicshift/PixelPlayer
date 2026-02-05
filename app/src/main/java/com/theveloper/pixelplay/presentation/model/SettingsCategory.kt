@@ -1,15 +1,12 @@
 package com.theveloper.pixelplay.presentation.model
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Style
 import androidx.compose.material.icons.rounded.DeveloperMode
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.SmartToy
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.theveloper.pixelplay.R
 
@@ -37,6 +34,12 @@ enum class SettingsCategory(
         title = "Playback",
         subtitle = "Audio behavior, crossfade, and background play",
         icon = Icons.Rounded.MusicNote // Using MusicNote again or maybe PlayCircle if available
+    ),
+    BEHAVIOR(
+        id = "behavior",
+        title = "Behavior",
+        subtitle = "Gestures and navigation behavior",
+        iconRes = R.drawable.rounded_touch_app_24
     ),
     AI_INTEGRATION(
         id = "ai",

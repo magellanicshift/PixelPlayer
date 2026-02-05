@@ -12,4 +12,8 @@ data class MusicFolder(
     val totalSongCount: Int by lazy {
         songs.size + subFolders.sumOf { it.totalSongCount }
     }
+
+    val totalSubFolderCount: Int by lazy {
+        subFolders.size + subFolders.sumOf { it.totalSubFolderCount }
+    }
 }

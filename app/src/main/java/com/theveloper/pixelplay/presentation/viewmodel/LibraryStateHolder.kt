@@ -137,6 +137,9 @@ class LibraryStateHolder @Inject constructor(
             val artistSortKey = userPreferencesRepository.artistsSortOptionFlow.first()
             _currentArtistSortOption.value = SortOption.ARTISTS.find { it.storageKey == artistSortKey } ?: SortOption.ArtistNameAZ
             
+            val folderSortKey = userPreferencesRepository.foldersSortOptionFlow.first()
+            _currentFolderSortOption.value = SortOption.FOLDERS.find { it.storageKey == folderSortKey } ?: SortOption.FolderNameAZ
+            
             
             val likedSortKey = userPreferencesRepository.likedSongsSortOptionFlow.first()
             _currentFavoriteSortOption.value = SortOption.LIKED.find { it.storageKey == likedSortKey } ?: SortOption.LikedSongDateLiked
@@ -197,7 +200,7 @@ class LibraryStateHolder @Inject constructor(
         foldersJob = scope?.launch {
             musicRepository.getMusicFolders().collect { folders ->
                  _musicFolders.value = folders.toImmutableList()
-                 sortFolders(_currentFolderSortOption.value)
+                 sortFolders(_currentFolderSortOption.value, persist = false)
             }
         }
     }
@@ -296,24 +299,28 @@ class LibraryStateHolder @Inject constructor(
         }
     }
 
-    fun sortFolders(sortOption: SortOption) {
+    fun sortFolders(sortOption: SortOption, persist: Boolean = true) {
         scope?.launch {
-            // Folders sort preference might not be persisted in the same way or done elsewhere?
-            // ViewModel checked "setFoldersPlaylistView" but not explicitly saving sort option in "sortFolders" function 
-            // except locally in state?
-            // Checking ViewModel: it just updates _playerUiState.
-            // But wait, initialize() loads getFolderSortOption(). So it should be persisted.
-            // Looking at ViewModel code again: sortFolders(sortOption) implementation at 4150 DOES NOT persist.
-            // But initialize calls userPreferencesRepository.getFolderSortOption().
-            // So perhaps persistence is missing in ViewModel or handled differently?
-            // I will add persistence if 'persist' arg is added or just match ViewModel behavior.
-            // The ViewModel sortFolders takes only sortOption.
-            
+            if (persist) {
+                userPreferencesRepository.setFoldersSortOption(sortOption.storageKey)
+            }
             _currentFolderSortOption.value = sortOption
             
             val sorted = when (sortOption) {
                 SortOption.FolderNameAZ -> _musicFolders.value.sortedBy { it.name.lowercase() }
                 SortOption.FolderNameZA -> _musicFolders.value.sortedByDescending { it.name.lowercase() }
+                SortOption.FolderSongCountAsc -> _musicFolders.value.sortedWith(
+                    compareBy<MusicFolder> { it.totalSongCount }.thenBy { it.name.lowercase() }
+                )
+                SortOption.FolderSongCountDesc -> _musicFolders.value.sortedWith(
+                    compareByDescending<MusicFolder> { it.totalSongCount }.thenBy { it.name.lowercase() }
+                )
+                SortOption.FolderSubdirCountAsc -> _musicFolders.value.sortedWith(
+                    compareBy<MusicFolder> { it.totalSubFolderCount }.thenBy { it.name.lowercase() }
+                )
+                SortOption.FolderSubdirCountDesc -> _musicFolders.value.sortedWith(
+                    compareByDescending<MusicFolder> { it.totalSubFolderCount }.thenBy { it.name.lowercase() }
+                )
                 else -> _musicFolders.value
             }
             _musicFolders.value = sorted.toImmutableList()

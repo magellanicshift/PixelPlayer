@@ -3,6 +3,7 @@ package com.theveloper.pixelplay.presentation.viewmodel
 import androidx.compose.runtime.Immutable
 import com.theveloper.pixelplay.data.model.Album
 import com.theveloper.pixelplay.data.model.Artist
+import com.theveloper.pixelplay.data.model.FolderSource
 import com.theveloper.pixelplay.data.model.MusicFolder
 import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.model.SearchResultItem
@@ -34,6 +35,9 @@ data class PlayerUiState(
     val dismissedPosition: Long = 0L,
     val currentFolder: MusicFolder? = null,
     val currentFolderPath: String? = null,
+    val folderSource: FolderSource = FolderSource.INTERNAL,
+    val folderSourceRootPath: String = "",
+    val isSdCardAvailable: Boolean = false,
     val lavaLampColors: ImmutableList<androidx.compose.ui.graphics.Color> = persistentListOf(),
     val undoBarVisibleDuration: Long = 4000L,
     val isFolderFilterActive: Boolean = false,
@@ -45,6 +49,7 @@ data class PlayerUiState(
     val currentAlbumSortOption: SortOption = SortOption.AlbumTitleAZ,
     val currentArtistSortOption: SortOption = SortOption.ArtistNameAZ,
     val currentFolderSortOption: SortOption = SortOption.FolderNameAZ,
+    val folderBackGestureNavigationEnabled: Boolean = false,
     val currentSongSortOption: SortOption = SortOption.SongTitleAZ,
     val songCount: Int = 0,
     val isGeneratingAiMetadata: Boolean = false,

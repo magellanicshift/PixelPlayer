@@ -154,6 +154,8 @@ fun PlaylistBottomSheet(
                     isFoldersTab = false,
                     onGenerateWithAiClick = { },
                     currentFolder = null,
+                    folderRootPath = "",
+                    folderRootLabel = "Internal Storage",
                     onFolderClick = { },
                     onNavigateBack = { }
                 )

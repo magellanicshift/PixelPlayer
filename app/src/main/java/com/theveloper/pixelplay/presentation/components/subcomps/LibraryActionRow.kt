@@ -1,6 +1,5 @@
 package com.theveloper.pixelplay.presentation.components.subcomps
 
-import android.os.Environment
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -62,7 +61,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theveloper.pixelplay.R
 import com.theveloper.pixelplay.data.model.MusicFolder
-import com.theveloper.pixelplay.data.model.SortOption
 import com.theveloper.pixelplay.ui.theme.GoogleSansRounded
 import java.io.File
 
@@ -83,6 +81,8 @@ fun LibraryActionRow(
     modifier: Modifier = Modifier,
     // Breadcrumb parameters
     currentFolder: MusicFolder?,
+    folderRootPath: String,
+    folderRootLabel: String,
     onFolderClick: (String) -> Unit,
     onNavigateBack: () -> Unit,
     isShuffleEnabled: Boolean = false
@@ -111,6 +111,8 @@ fun LibraryActionRow(
             if (isFolders) {
                 Breadcrumbs(
                     currentFolder = currentFolder,
+                    rootPath = folderRootPath,
+                    rootLabel = folderRootLabel,
                     onFolderClick = onFolderClick,
                     onNavigateBack = onNavigateBack
                 )
@@ -259,21 +261,27 @@ fun LibraryActionRow(
 @Composable
 fun Breadcrumbs(
     currentFolder: MusicFolder?,
+    rootPath: String,
+    rootLabel: String,
     onFolderClick: (String) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val rowState = rememberLazyListState()
-    val storageRootPath = Environment.getExternalStorageDirectory().path
-    val pathSegments = remember(currentFolder?.path) {
-        val path = currentFolder?.path ?: storageRootPath
-        val relativePath = path.removePrefix(storageRootPath).removePrefix("/")
-        if (relativePath.isEmpty() || path == storageRootPath) {
-            listOf("Internal Storage" to storageRootPath)
+    val pathSegments = remember(currentFolder?.path, rootPath, rootLabel) {
+        val path = currentFolder?.path ?: rootPath
+        val normalizedRoot = rootPath.removeSuffix("/")
+        val normalizedPath = path.removeSuffix("/")
+        val relativePath = normalizedPath
+            .removePrefix(normalizedRoot)
+            .removePrefix("/")
+
+        if (!normalizedPath.startsWith(normalizedRoot) || relativePath.isEmpty() || normalizedPath == normalizedRoot) {
+            listOf(rootLabel to rootPath)
         } else {
-            listOf("Internal Storage" to storageRootPath) + relativePath.split("/").scan("") { acc, segment ->
+            listOf(rootLabel to rootPath) + relativePath.split("/").scan("") { acc, segment ->
                 "$acc/$segment"
             }.drop(1).map {
-                val file = File(storageRootPath, it)
+                val file = File(rootPath, it)
                 file.name to file.path
             }
         }
@@ -348,7 +356,6 @@ fun Breadcrumbs(
             items(pathSegments.size) { index ->
                 val (name, path) = pathSegments[index]
                 val isLast = index == pathSegments.lastIndex
-                val isFirst = index == 0
                 Text(
                     text = name,
                     style = MaterialTheme.typography.titleSmall,
