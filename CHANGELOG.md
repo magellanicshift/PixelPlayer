@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Apple Music-style lyrics experience** with blur effect on non-active lines and word-by-word karaoke highlighting (feat: @magellanicshift)
+- Word grouping algorithm for fast-paced songs ensuring readable lyrics display (feat: @magellanicshift)
+- Material 3 Expressive motion curves for smoother lyrics animations with spring-based transitions (feat: @magellanicshift)
+
+### Changed
+- **Lyrics Screen UI**: Redesigned with unified pill control bar, full-width layout, and vinyl-style rotating album art (refactor: @magellanicshift)
+- Improved lyrics sync with subtle scale animations and enhanced visual feedback (refactor: @magellanicshift)
+
 ## [0.5.0-beta] - 2026-01-14
 
 ### Added
