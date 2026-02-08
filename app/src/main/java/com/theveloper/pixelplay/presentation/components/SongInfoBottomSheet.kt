@@ -75,6 +75,9 @@ import java.io.File
 
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import com.theveloper.pixelplay.presentation.screens.TabAnimation
 import com.theveloper.pixelplay.ui.theme.GoogleSansRounded
 
@@ -230,59 +233,56 @@ fun SongInfoBottomSheet(
                 ) { page ->
                     when (page) {
                         0 -> { // Options / Actions
-                            LazyColumn(
-                                modifier = Modifier.fillMaxWidth(),
-                                contentPadding = PaddingValues(horizontal = 16.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                item {
+                                // ========== GROUP 1: PLAYBACK ==========
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(36.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    tonalElevation = 1.dp
+                                ) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(IntrinsicSize.Min),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                            .height(72.dp)
+                                            .padding(6.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        MediumExtendedFloatingActionButton(
-                                            modifier = Modifier
-                                                .weight(0.5f)
-                                                .fillMaxHeight(),
+                                        // Play Button
+                                        PillActionButton(
+                                            modifier = Modifier.weight(1f),
                                             onClick = onPlaySong,
-                                            elevation = FloatingActionButtonDefaults.elevation(0.dp),
-                                            shape = playButtonShape,
-                                            icon = {
-                                                Icon(Icons.Rounded.PlayArrow, contentDescription = "Play song")
-                                            },
-                                            text = {
-                                                Text(
-                                                    modifier = Modifier.padding(end = 10.dp),
-                                                    text = "Play"
-                                                )
-                                            }
+                                            icon = Icons.Rounded.PlayArrow,
+                                            label = "Play",
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary
                                         )
-
-                                        FilledIconButton(
-                                            modifier = Modifier
-                                                .weight(0.25f)
-                                                .fillMaxHeight(),
+                                        
+                                        // Favorite Button
+                                        PillActionButton(
+                                            modifier = Modifier.weight(1f),
                                             onClick = onToggleFavorite,
-                                            shape = favoriteButtonShape,
-                                            colors = IconButtonDefaults.filledIconButtonColors(
-                                                containerColor = favoriteButtonContainerColor,
-                                                contentColor = favoriteButtonContentColor
-                                            )
-                                        ) {
-                                            Icon(
-                                                modifier = Modifier.size(FloatingActionButtonDefaults.LargeIconSize),
-                                                imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                                                contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites"
-                                            )
-                                        }
-
-                                        FilledTonalIconButton(
-                                            modifier = Modifier
-                                                .weight(0.25f)
-                                                .fillMaxHeight(),
+                                            icon = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                            label = if (isFavorite) "Liked" else "Like",
+                                            containerColor = if (isFavorite) 
+                                                MaterialTheme.colorScheme.primaryContainer 
+                                            else 
+                                                MaterialTheme.colorScheme.surfaceContainerHighest,
+                                            contentColor = if (isFavorite) 
+                                                MaterialTheme.colorScheme.onPrimaryContainer 
+                                            else 
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        
+                                        // Share Button
+                                        PillActionButton(
+                                            modifier = Modifier.weight(1f),
                                             onClick = {
                                                 try {
                                                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
@@ -295,101 +295,79 @@ fun SongInfoBottomSheet(
                                                     Toast.makeText(context, "Could not share song: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                                                 }
                                             },
-                                            shape = CircleShape
-                                        ) {
-                                            Icon(
-                                                modifier = Modifier.size(FloatingActionButtonDefaults.LargeIconSize),
-                                                imageVector = Icons.Rounded.Share,
-                                                contentDescription = "Share song file"
-                                            )
-                                        }
+                                            icon = Icons.Rounded.Share,
+                                            label = "Share",
+                                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
                                 }
-                                item {
+                                
+                                // ========== GROUP 2: QUEUE ==========
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(36.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    tonalElevation = 1.dp
+                                ) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(IntrinsicSize.Min),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                            .height(72.dp)
+                                            .padding(6.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        FilledTonalButton(
-                                            modifier = Modifier
-                                                .weight(0.6f)
-                                                .heightIn(min = 66.dp),
-                                            colors = ButtonDefaults.filledTonalButtonColors(
-                                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                                            ),
-                                            contentPadding = PaddingValues(horizontal = 0.dp),
-                                            shape = CircleShape,
-                                            onClick = onAddToQueue
-                                        ) {
-                                            Icon(
-                                                Icons.AutoMirrored.Rounded.QueueMusic,
-                                                contentDescription = "Add to Queue"
-                                            )
-                                            Spacer(Modifier.width(14.dp))
-                                            Text("Add to Queue")
-                                        }
-                                        FilledTonalButton(
-                                            modifier = Modifier
-                                                .weight(0.4f)
-                                                .heightIn(min = 66.dp),
-                                            colors = ButtonDefaults.filledTonalButtonColors(
-                                                containerColor = MaterialTheme.colorScheme.tertiary,
-                                                contentColor = MaterialTheme.colorScheme.onTertiary
-                                            ),
-                                            contentPadding = PaddingValues(horizontal = 0.dp),
-                                            shape = CircleShape,
-                                            onClick = onAddNextToQueue
-                                        ) {
-                                            Icon(
-                                                Icons.AutoMirrored.Filled.QueueMusic,
-                                                contentDescription = "Play Next"
-                                            )
-                                            Spacer(Modifier.width(8.dp))
-                                            Text("Next")
-                                        }
+                                        // Add to Queue
+                                        PillActionButton(
+                                            modifier = Modifier.weight(1f),
+                                            onClick = onAddToQueue,
+                                            icon = Icons.AutoMirrored.Rounded.QueueMusic,
+                                            label = "Add to Queue",
+                                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                        )
+                                        
+                                        // Play Next
+                                        PillActionButton(
+                                            modifier = Modifier.weight(1f),
+                                            onClick = onAddNextToQueue,
+                                            icon = Icons.AutoMirrored.Filled.QueueMusic,
+                                            label = "Play Next",
+                                            containerColor = MaterialTheme.colorScheme.tertiary,
+                                            contentColor = MaterialTheme.colorScheme.onTertiary
+                                        )
                                     }
                                 }
-
-                                item {
+                                
+                                // ========== GROUP 3: LIBRARY ==========
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(36.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    tonalElevation = 1.dp
+                                ) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(IntrinsicSize.Min),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                            .height(72.dp)
+                                            .padding(6.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        FilledTonalButton(
-                                            modifier = Modifier
-                                                .weight(0.5f)
-                                                .heightIn(min = 66.dp),
-                                            colors = ButtonDefaults.filledTonalButtonColors(
-                                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                                            ),
-                                            shape = CircleShape,
-                                            onClick = onAddToPlayList
-                                        ) {
-                                            Icon(
-                                                Icons.AutoMirrored.Rounded.PlaylistAdd,
-                                                contentDescription = "Add to Playlist"
-                                            )
-                                            Spacer(Modifier.width(8.dp))
-                                            Text("Playlist")
-                                        }
-
-                                        FilledTonalButton(
-                                            modifier = Modifier
-                                                .weight(0.5f)
-                                                .heightIn(min = 66.dp),
-                                            colors = ButtonDefaults.filledTonalButtonColors(
-                                                containerColor = MaterialTheme.colorScheme.errorContainer,
-                                                contentColor = MaterialTheme.colorScheme.onErrorContainer
-                                            ),
-                                            shape = CircleShape,
+                                        // Add to Playlist
+                                        PillActionButton(
+                                            modifier = Modifier.weight(1f),
+                                            onClick = onAddToPlayList,
+                                            icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                                            label = "Playlist",
+                                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                        
+                                        // Delete
+                                        PillActionButton(
+                                            modifier = Modifier.weight(1f),
                                             onClick = {
                                                 (context as? Activity)?.let { activity ->
                                                     onDeleteFromDevice(activity, song) { result ->
@@ -399,20 +377,16 @@ fun SongInfoBottomSheet(
                                                         }
                                                     }
                                                 }
-                                            }
-                                        ) {
-                                            Icon(
-                                                Icons.Default.DeleteForever,
-                                                contentDescription = "Delete"
-                                            )
-                                            Spacer(Modifier.width(8.dp))
-                                            Text("Delete")
-                                        }
+                                            },
+                                            icon = Icons.Default.DeleteForever,
+                                            label = "Delete",
+                                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                        )
                                     }
                                 }
-                                item {
-                                    Spacer(Modifier.height(80.dp))
-                                }
+                                
+                                Spacer(Modifier.height(80.dp))
                             }
                         }
                         1 -> { // Details / Info
@@ -560,4 +534,86 @@ fun SongInfoBottomSheet(
         },
         generateAiMetadata = generateAiMetadata
     )
+}
+
+/**
+ * A pill-shaped action button with Material 3 Expressive microinteractions.
+ * Features scale-on-press animation with spring physics.
+ */
+@Composable
+private fun PillActionButton(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    containerColor: Color,
+    contentColor: Color
+) {
+    var isPressed by remember { mutableStateOf(false) }
+    
+    // Scale animation with spring physics (M3 Expressive)
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isPressed) 0.92f else 1f,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
+        ),
+        label = "buttonScale"
+    )
+    
+    // Animated colors for smooth transitions
+    val animatedContainerColor by animateColorAsState(
+        targetValue = containerColor,
+        animationSpec = tween(durationMillis = 250),
+        label = "containerColor"
+    )
+    val animatedContentColor by animateColorAsState(
+        targetValue = contentColor,
+        animationSpec = tween(durationMillis = 250),
+        label = "contentColor"
+    )
+    
+    Surface(
+        modifier = modifier
+            .fillMaxHeight()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        isPressed = true
+                        tryAwaitRelease()
+                        isPressed = false
+                    },
+                    onTap = { onClick() }
+                )
+            },
+        shape = CircleShape,
+        color = animatedContainerColor,
+        contentColor = animatedContentColor
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+        }
+    }
 }

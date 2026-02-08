@@ -169,13 +169,24 @@ fun AboutScreen(
 
     val githubService = remember { GitHubContributorService() }
 
+    // Manual contributors to always show (even if offline or not in API response)
+    val manualContributors = remember {
+        listOf(
+            Contributor(
+                name = "Prakhar Mishra",
+                githubUrl = "https://github.com/magellanicshift",
+                avatarUrl = "https://github.com/magellanicshift.png"
+            )
+        )
+    }
+
     // Fetch contributors from GitHub API
     LaunchedEffect(Unit) {
         try {
             val result = githubService.fetchContributors()
             result.onSuccess { githubContributors ->
                 // Convert GitHub contributors to our Contributor model
-                contributors = githubContributors
+                val apiContributors = githubContributors
                     .filter { it.login != "theovilardo" } // Remove author from contributors list
                     .map { github ->
                         Contributor(
@@ -185,11 +196,15 @@ fun AboutScreen(
                             githubUrl = github.html_url
                         )
                     }
+                
+                // Merge manual contributors with API contributors, removing duplicates by GitHub URL
+                val merged = (manualContributors + apiContributors).distinctBy { it.githubUrl ?: it.name }
+                contributors = merged
             }
             result.onFailure { exception ->
                 Timber.e(exception, "Failed to fetch contributors from GitHub")
-                // Fall back to empty list if fetch fails
-                contributors = emptyList()
+                // Fall back to manual list if fetch fails
+                contributors = manualContributors
             }
         } finally {
             isLoadingContributors = false

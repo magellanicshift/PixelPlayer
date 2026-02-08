@@ -17,6 +17,10 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.rememberModalBottomSheetState
 
 import androidx.compose.animation.AnimatedVisibility
@@ -34,6 +38,8 @@ import androidx.compose.animation.core.animateTo
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.ui.draw.blur
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -65,7 +71,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.painterResource
+
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -74,7 +80,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.animation.core.Animatable
-import androidx.compose.ui.graphics.graphicsLayer
+
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.input.pointer.consumePositionChange
@@ -89,8 +95,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import kotlinx.coroutines.delay
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -641,69 +646,7 @@ fun LyricsSheet(
                     )
                 }
 
-                // Playback Controls Row
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 0.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    // Play/Pause Button (Smaller)
-                    val playPauseCornerRadius by animateDpAsState(
-                        targetValue = if (isPlaying) 18.dp else 50.dp,
-                        animationSpec = spring(stiffness = Spring.StiffnessLow),
-                        label = "playPauseShape"
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .size(78.dp)
-                            .clip(RoundedCornerShape(playPauseCornerRadius))
-                            .background(tertiaryColor)
-                            .clickable(onClick = onPlayPause),
-                        contentAlignment = Alignment.Center
-                    ) {
-                         AnimatedContent(
-                            targetState = isPlaying,
-                            label = "playPauseIconAnimation"
-                        ) { playing ->
-                            if (playing) {
-                                Icon(
-                                    modifier = Modifier.size(32.dp),
-                                    imageVector = Icons.Rounded.Pause,
-                                    contentDescription = "Pause",
-                                    tint = onTertiaryColor
-                                )
-                            } else {
-                                Icon(
-                                    modifier = Modifier.size(32.dp),
-                                    imageVector = Icons.Rounded.PlayArrow,
-                                    contentDescription = "Play",
-                                    tint = onTertiaryColor
-                                )
-                            }
-                        }
-                    }
-
-                    // Progress Bar
-                    PlayerSeekBar(
-                        backgroundColor = backgroundColor, // Transparent as it's now inline
-                        onBackgroundColor = onBackgroundColor,
-                        primaryColor = accentColor,
-                        currentPosition = playerUiState.currentPosition,
-                        totalDuration = stablePlayerState.totalDuration,
-                        onSeek = onSeekTo,
-                        isPlaying = isPlaying,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp)
-                    )
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Floating Toolbar
+                // Floating Toolbar with integrated controls
                 LyricsFloatingToolbar(
                     modifier = Modifier.padding(horizontal = 0.dp),
                     showSyncedLyrics = showSyncedLyrics,
@@ -715,7 +658,13 @@ fun LyricsSheet(
                     backgroundColor = backgroundColor,
                     onBackgroundColor = onBackgroundColor,
                     accentColor = accentColor,
-                    onAccentColor = onAccentColor
+                    onAccentColor = onAccentColor,
+                    // Playback controls
+                    isPlaying = isPlaying,
+                    onPlayPause = onPlayPause,
+                    currentPosition = playerUiState.currentPosition,
+                    totalDuration = stablePlayerState.totalDuration,
+                    onSeek = onSeekTo
                 )
              }
             }
@@ -969,76 +918,74 @@ fun LyricLineRow(
     val isCurrentLine by remember(position, line.time, nextTime) {
         derivedStateOf { position in line.time.toLong()..<nextTime.toLong() }
     }
-    val unhighlightedColor = LocalContentColor.current.copy(alpha = 0.45f)
-    val lineColor by animateColorAsState(
+    
+    // Fluid spring physics for organic motion
+    val fluidSpringFloat = spring<Float>(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessLow
+    )
+    val bouncySpring = spring<Float>(
+        dampingRatio = Spring.DampingRatioMediumBouncy,
+        stiffness = Spring.StiffnessLow
+    )
+    
+    // Blur effect
+    val blurRadius by animateFloatAsState(
+        targetValue = if (isCurrentLine) 0f else 3f, // Increased blur slightly for better contrast
+        animationSpec = fluidSpringFloat,
+        label = "blurRadius"
+    )
+    
+    // Alpha transition
+    val lineAlpha by animateFloatAsState(
+        targetValue = if (isCurrentLine) 1f else 0.5f,
+        animationSpec = fluidSpringFloat,
+        label = "lineAlpha"
+    )
+    
+    // Scale animation - bouncy focus
+    val lineScale by animateFloatAsState(
+        targetValue = if (isCurrentLine) 1f else 0.95f,
+        animationSpec = bouncySpring,
+        label = "lineScale"
+    )
+    
+    // Color transition
+    val unhighlightedColor = LocalContentColor.current.copy(alpha = 0.5f)
+    val textColor by animateColorAsState(
         targetValue = if (isCurrentLine) accentColor else unhighlightedColor,
-        animationSpec = tween(durationMillis = 250),
-        label = "lineColor"
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label = "textColor"
     )
 
-    if (sanitizedWords.isNullOrEmpty()) {
-        Text(
-            text = sanitizedLine,
-            style = style,
-            color = lineColor,
-            fontWeight = if (isCurrentLine) FontWeight.Bold else FontWeight.Normal,
-            modifier = modifier
-                .clip(RoundedCornerShape(12.dp))
-                .clickable { onClick() }
-                .padding(vertical = 4.dp, horizontal = 2.dp)
-        )
-    } else {
-        FlowRow(
-            modifier = modifier
-                .clip(RoundedCornerShape(12.dp))
-                .clickable { onClick() }
-                .padding(vertical = 4.dp, horizontal = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            sanitizedWords.forEachIndexed { wordIndex, word ->
-                key("${line.time}_${word.time}_${word.word}") {
-                    val nextWordTime =
-                        sanitizedWords.getOrNull(wordIndex + 1)?.time?.toLong() ?: nextTime.toLong()
-                    val isCurrentWord by remember(position, word.time, nextWordTime) {
-                        derivedStateOf { position in word.time.toLong()..<nextWordTime }
-                    }
-                    LyricWordSpan(
-                        word = word,
-                        isHighlighted = isCurrentLine && isCurrentWord,
-                        style = style,
-                        highlightedColor = accentColor,
-                        unhighlightedColor = unhighlightedColor
-                    )
-                }
-            } // End Column
-        }
-    }
-}
+    // Smooth Font Weight transition
+    // Animate broadly from Normal (400) to Bold (700)
+    // val targetWeight = if (isCurrentLine) 700 else 400
+    // val animatedWeight by androidx.compose.animation.core.animateIntAsState(...)
+    // Removed animation to prevent "snapping" delay reported by user.
+    // We rely on Scale/Color/Blur for fluidity.
 
-@Composable
-fun LyricWordSpan(
-    word: SyncedWord,
-    isHighlighted: Boolean,
-    style: TextStyle,
-    highlightedColor: Color,
-    unhighlightedColor: Color,
-    modifier: Modifier = Modifier
-) {
-    val color by animateColorAsState(
-        targetValue = if (isHighlighted) highlightedColor else unhighlightedColor,
-        animationSpec = tween(durationMillis = 200),
-        label = "wordColor"
-    )
-
+    // Unified Text implementation for all lines (no word-by-word)
     Text(
-        text = word.word,
+        text = sanitizedLine,
         style = style,
-        color = color,
-        fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal,
+        color = textColor,
+        fontWeight = if (isCurrentLine) FontWeight.Bold else FontWeight.Normal, // Instant switch
         modifier = modifier
+            .graphicsLayer {
+                alpha = lineAlpha
+                scaleX = lineScale
+                scaleY = lineScale
+                transformOrigin = TransformOrigin(0f, 0.5f) // Scale from left
+            }
+            .blur(blurRadius.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onClick() }
+            .padding(vertical = 8.dp, horizontal = 4.dp) // Increased vertical padding for breathing room
     )
+
 }
+
 
 @Composable
 fun PlainLyricsLine(
@@ -1268,7 +1215,7 @@ private fun LyricsTrackInfo(
 
         Column(
             modifier = Modifier
-                .weight(1f, fill = false) // Allow shrinking if content is small
+                .weight(1f) // Take all remaining space
                 .padding(vertical = 6.dp)
                 .padding(end = 6.dp),
             verticalArrangement = Arrangement.Center
@@ -1296,8 +1243,8 @@ private fun LyricsTrackInfo(
 
         PlayingEqIcon(
             modifier = Modifier
-                .padding(start = 8.dp, end = 18.dp)
-                .size(width = 18.dp, height = 16.dp),
+                .padding(end = 20.dp) // Adjusted for visual balance with round pill end
+                .size(width = 20.dp, height = 18.dp),
             color = contentColor,
             isPlaying = isPlaying
         )

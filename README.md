@@ -64,10 +64,11 @@
 - **Playlists** - Create and manage custom playlists
 - **Statistics** - Track your listening history and habits
 
-### 🎤 Lyrics
-- **Synchronized Lyrics** - LRC format via LRCLIB API
+### 🎤 Enhanced Lyrics Experience
+- **Fluid Animations** - Spring-based animations for blur, scale, and color transitions
+- **Synchronized Lyrics** - LRC format via LRCLIB API with precise timing
 - **Lyrics Editing** - Modify or add lyrics to your tracks
-- **Scrolling Display** - Follow along as you listen
+- **Interactive UI** - Floating control toolbar keys, fully rounded buttons, and immersive scrolling
 
 ### 🖼️ Artist Artwork
 - **Deezer Integration** - Automatic artist images from Deezer API
